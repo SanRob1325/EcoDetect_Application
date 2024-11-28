@@ -1,0 +1,137 @@
+body,html {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f4fdf4;
+    color: #2f4f2f;
+    margin: 0;
+    padding: 0;
+}
+
+.site-layout-background{
+    background-color: #228b22;
+    color: white;
+}
+
+.site-layout-background .ant-menu{
+    background: transparent;
+}
+
+.ant-layout-sider {
+    background: #001529 !important
+}
+
+.ant-layout-sider .ant-menu-item{
+    color: rgba(255,255,22,0.85)
+}
+
+.ant-layout-sider .ant-menu-item:hover{
+    color:#1890ff
+}
+
+.ant-layout-sider .ant-men-item-selected{
+    color: #1890ff;
+    background: rgba(255,255,22,0.1)
+}
+
+.ant-layout-header{
+    background: #ffffff;
+    border-bottom: 1px solid #f0f0f0;
+    padding:0 16px;
+}
+
+.ant-layout-header .ant-typography{
+    text-align: center;
+    color: #001525;
+    font-weight: bold;
+}
+
+.ant-layout-content{
+    padding: 24px;
+    background: #f5f5f5;
+}
+
+.ant-card{
+    border-radius:8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.ant-card-title{
+    font-size: 1.25em;
+    color: #001529;
+    text-align: center;
+}
+
+.ant-btn-primary{
+    background-color: #1890ff;
+    border-color: #1890ff ;
+    transition: all 0.3s;
+}
+
+.ant-btn-primary:hover{
+    background-color:  #40a9ff;
+    border-color: #40a9ff
+}
+header {
+    background-color: hsl(113, 46%, 37%);
+}
+
+h1,h2{
+    color: #2c3e50;
+}
+
+.gauge-container{
+    display: flex;
+    justify-content: center;
+    gap: 50px;
+    align-self: center;
+    margin-top: 16px;
+}
+
+.gauge-container div{
+    text-align: center;
+}
+
+.card-container{
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.card-container .ant-card{
+    width: 30%;
+}
+
+.card-title{
+    color: #27ae60
+}
+
+.ant-slider-handle{
+    border: #1890ff
+}
+.menu-background{
+    background-color: #27ae60;
+}
+
+.header-title{
+    text-align: center;
+    color: #2c3e50
+}
+
+.temperature-trends-list li{
+    margin-bottom: 9px;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid  #f0f0f0;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.temperature-trends-list li:hover{
+    background: #f5f5f5
+}
+
+.logo-top-right{
+    max-width: 57,px;
+    height: auto;
+    position: absolute;
+    top:10px;
+    right:20px;
+}
