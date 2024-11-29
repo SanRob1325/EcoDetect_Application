@@ -6,3 +6,4 @@ temperature = sensor.get_temperature()
 humidity = sensor.get_humidity()
 
 print(temperature)
+print(humidity)
