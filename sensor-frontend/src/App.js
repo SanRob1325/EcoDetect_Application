@@ -4,6 +4,7 @@ import { Layout, Menu, Typography} from 'antd';
 import './App.css';
 import AIAssistant from './AIAssistant';
 import Dashboard from './Dashboard'
+import NoticeBoard from './NoticeBoard';
 import logo from './Icon-Only-Black.png'
 
 const { Header, Content, Sider } = Layout;
@@ -21,6 +22,7 @@ const App = () => {
           <Menu theme="dark" mode="inline" defaultSelectedKeys={['1']} style={{ height: '100%', borderRight: 0 }}>
             <Menu.Item key="1"><Link to="/">Dashboard</Link></Menu.Item>
             <Menu.Item key="2"><Link to="/ai-assistant">AI Assistant</Link></Menu.Item>
+            <Menu.Item key="3"><Link to="/notice-board">Notice Board</Link></Menu.Item>
           </Menu>
         </Sider>
         <Layout>
@@ -32,6 +34,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/ai-assistant" element={<AIAssistant />} />
+              <Route path="/notice-board" element={<NoticeBoard />} />
             </Routes>
           </Content>
         </Layout>

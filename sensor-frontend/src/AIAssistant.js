@@ -4,7 +4,7 @@ import {Input,Button,Card,Spin,Typography} from 'antd'
 import {LoadingOutlined} from '@ant-design/icons';
 import './AIAssistant.css';
 
-const {Title, Paragragh} = Typography
+const {Title, Paragraph} = Typography
 
 const AIAssistant = () => {
     const [userQuery,setUserQuery] = useState('');
@@ -52,7 +52,7 @@ const AIAssistant = () => {
                     {aiResponse &&(
                         <div style={{marginTop: '20px'}}>
                             <Title level={4}>AI Response:</Title>
-                            <Paragragh>{aiResponse}</Paragragh>
+                            <Paragraph>{aiResponse}</Paragraph>
                         </div>
                     )}
                 </Card>
