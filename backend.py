@@ -12,38 +12,60 @@ from pymongo import MongoClient
 import logging
 from bson import ObjectId
 import boto3
-
+#logging setup
 logging.basicConfig(level=logging.DEBUG)
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
-
+#Database setup
 client = MongoClient("mongodb://localhost:27017")
 db = client.ecodetect
 sensor_data_collection = db.sensor_data
 thresholds_collection = db.thresholds
+alert_history_collection = db.alert_history
+#aws SNS setup
 sns_client = boto3.client('sns',region_name='eu-west')
+SNS_TOPIC_ARN= 'arn:aws:sns:eu-west-1:442042527353:HumidityAlertsTopic'
 
 thresholds = thresholds_collection.find_one()
-HUMIDITY_THRESHOLD_LOW = 30
-HUMIDITY_THRESHOLD_HIGH = 60
-SNS_TOPIC_ARN= 'arn:aws:sns:eu-west-1:442042527353:HumidityAlertsTopic'
+
+
 print(thresholds)
 sensor = SenseHat()
+
+#openai setup for prototype and testing purposes
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
+#threshold defaults before user adjustment
 default_temperature_range = [20,25]
 default_humidity_range =[30,60]
+HUMIDITY_THRESHOLD_LOW = 30
+HUMIDITY_THRESHOLD_HIGH = 60
+
+def get_default_thresholds():
+    thresholds = thresholds_collection.find_one({}, {"_id":0})
+    if thresholds is None:
+        thresholds ={
+            "temperature_range":default_temperature_range,
+            "humidity_range": default_humidity_range
+        }
+    return thresholds
 
 def trigger_humidity_alert(humidity_value):
-    message = f"Humidity Alert: Current Level is {humidity_value}%. Make sure you check your environment and heating"
+    message = f"Humidity Alert: Current level is {humidity_value}%. Check you environment heating"
     sns_client.publish(
-        TopicArn=SNS_TOPIC_ARN,
+        TopicArn =SNS_TOPIC_ARN,
         Message=message,
         Subject="Humidity Alert"
     )
+    alert_history_collection._insert_one({
+        "message": message,
+        "type": "critical" if humidity_value < HUMIDITY_THRESHOLD_LOW or humidity_value > HUMIDITY_THRESHOLD_HIGH else "warning",
+        "date": datetime.now()
+    })
     
+ #monitor humidity to trigger alerts   
 @app.route('/api/humidity',methods=['POST'])
 def monitor_humidity():
     try:
@@ -56,6 +78,15 @@ def monitor_humidity():
             trigger_humidity_alert(humidity)
         return jsonify({"status": "Humidity checl completed","humidity": humidity})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+      
+@app.route('/api/alerts', methods=['GET'])
+def get_alerts():
+    try:
+        alerts = list(alert_history_collection.find({}, {"_id": 0}).sort("date",-1))
+        return jsonify(alerts)
+    except Exception as e:
+        logging.error(f"Error in /api/alerts: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.route('/api/notifications', methods=['GET'])
@@ -93,15 +124,7 @@ def ai_assistant():
     except Exception as e:
         return({"error":"Unexpected server error", "details": str(e)}),500
 
-def get_default_thresholds():
-    thresholds = thresholds_collection.find_one({}, {"_id":0})
-    if thresholds is None:
-        thresholds ={
-            "temperature_range":default_temperature_range,
-            "humidity_range": default_humidity_range
-        }
-    return thresholds
-
+#fetch sensor data
 @app.route('/api/sensor-data', methods=['GET'])
 def get_sensor_data():
     try:

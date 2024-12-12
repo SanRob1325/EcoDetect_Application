@@ -5,6 +5,8 @@ import './App.css';
 import AIAssistant from './AIAssistant';
 import Dashboard from './Dashboard'
 import NoticeBoard from './NoticeBoard';
+import SettingsPage from './SettingsPage';
+import Alerts from './Alerts';
 import logo from './Icon-Only-Black.png'
 
 const { Header, Content, Sider } = Layout;
@@ -23,6 +25,8 @@ const App = () => {
             <Menu.Item key="1"><Link to="/">Dashboard</Link></Menu.Item>
             <Menu.Item key="2"><Link to="/ai-assistant">AI Assistant</Link></Menu.Item>
             <Menu.Item key="3"><Link to="/notice-board">Notice Board</Link></Menu.Item>
+            <Menu.Item key="4"><Link to="/alerts">Alerts</Link></Menu.Item>
+            <Menu.Item key="5"><Link to="/settings">Settings</Link></Menu.Item>
           </Menu>
         </Sider>
         <Layout>
@@ -35,6 +39,8 @@ const App = () => {
               <Route path="/" element={<Dashboard />} />
               <Route path="/ai-assistant" element={<AIAssistant />} />
               <Route path="/notice-board" element={<NoticeBoard />} />
+              <Route path="/alerts" element={<Alerts />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </Content>
         </Layout>
