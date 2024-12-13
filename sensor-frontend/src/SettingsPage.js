@@ -1,6 +1,8 @@
 import React, {useState} from 'react';
 import {Card, Form, InputNumber,Switch, Button} from 'antd';
 
+//Settings page inspiration:https://plainenglish.io/blog/how-to-build-a-user-settings-page
+//State to hold the settings for temperature,humidity,CO2 and notification preferences
 const SettingsPage = () => {
     const [settings,setSettings] = useState({
         temperature: {low:20, high: 25},
@@ -8,14 +10,15 @@ const SettingsPage = () => {
         co2: {max: 1000},
         notificationPreferences: {email: true, sms: true},
     });
-
+    // function to handle submission and update settings state
     const onFinish = (values) => {
-        console.log('Updated settings:', values);
-        setSettings(values);
+        console.log('Updated settings:', values); //logs updated values
+        setSettings(values); // update state with new values
     };
 
     return(
         <Card title="Settings" style={{margin: '16px'}}>
+            {/*Form with initial values to set the current settings*/}
             <Form
                 initialValues={settings}
                 layout='vertical'

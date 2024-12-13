@@ -14,7 +14,7 @@ const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
 const App = () => {
- 
+ //Navigation for the different pages
   return (
     <Router>
       <Layout style={{ minHeight: '100vh' }}>

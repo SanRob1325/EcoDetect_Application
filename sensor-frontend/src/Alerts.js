@@ -1,7 +1,7 @@
 import React from 'react';
 import {Card} from 'antd';
 import AlertCard from './AlertCard';
-
+//Populated alerts with static json values for prototype testing
 const alerts = [
     {id: 1, message: 'Humidity is critical high at 80%',type: 'critical',date: '2024-12-10T10:15:00', suggestedAction: 'Check the dehumidifier'},
     {id: 2, message: 'Temperature is slightly above 37 degree C',type: 'warning',date: '2024-12-09T15:20:00', suggestedAction: 'Turn down heating'},

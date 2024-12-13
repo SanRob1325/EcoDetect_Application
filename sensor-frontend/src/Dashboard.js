@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import GaugeChart from 'react-gauge-chart';
-import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar } from 'antd';
-import { RobotOutlined, SendOutlined } from '@ant-design/icons'
-import chatbotIcon from './Icon-Only-Color.png'
+import React, { useEffect, useState } from 'react'; 
+import axios from 'axios'; // Avios is used for HTTP requests. Reference: https://axios-http.com/docs/intro
+import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://antoniolago.github.io/react-gauge-component/ and https://www.npmjs.com/package/react-gauge-chart
+import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
+import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
+import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
 
 const { Option } = Select;
-
+//Stores sensor data such as temperature,humidity,water usage and CO2 leves
 const Dashboard = () => {
     const [data, setData] = useState({ temperature: null, humidity: null, waterUsage: null, co2: null });
     const [temperatureTrends, setTemperatureTrends] = useState([]);
@@ -15,17 +15,23 @@ const Dashboard = () => {
         temperature_range: [20, 25],
         humidity_range: [30, 60],
     });
-
+    // For displayinh trends in temperature and CO2 levels,including user defined thresholds
     const [selectedRange, setSelectedRange] = useState('24h');
     const [loading, setLoading] = useState(false)
     const [isUpdatingThresholds, setIsUpdatingThresholds] = useState(false);
-    const [isChatbotVisible, setIsChatbotVisible] = useState(false)
+    const [isChatbotVisible, setIsChatbotVisible] = useState(false) //stores user queries in the bot,still in development for SageMaker 
     const [chatHistory, setChatHistory] = useState([
         { sender: 'bot', message: 'Hello! How can I assist you today?' },]);
     const [userInput, setUserInput] = useState('')
 
-    const CPU_TEMPERATURE_OFFSET = 5;
+    const CPU_TEMPERATURE_OFFSET = 5; //Normalise CPU temperature to reduce noise in the temperature value
 
+    /**
+     * Adjusts temperature readings to exclude CPU output
+     * @param {number} temperature 
+     * @returns {number|null} - Normalised temperature normalise or null if there is no data 
+     * Reference within Requirements documentation
+     */
     const normaliseTemperature = (temperature) => {
         if (temperature === null) return null;
         return temperature - CPU_TEMPERATURE_OFFSET;
@@ -52,7 +58,7 @@ const Dashboard = () => {
         const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
-
+//fetches ranges for co2 and temperature  References:https://blog.logrocket.com/understanding-axios-get-requests/
     useEffect(() => {
         const fetchCo2Trends = async () => {
             try {
@@ -78,7 +84,7 @@ const Dashboard = () => {
         };
         fetchTrends();
     }, [selectedRange]);
-
+    // Fetches the defail threshold ranges from the backend for the humidity and temperature
     useEffect(() => {
         const fetchThresholds = async () => {
             try {
@@ -92,7 +98,8 @@ const Dashboard = () => {
         };
         fetchThresholds();
     }, []);
-
+    //Sends updated thresholds to the backend API 
+    //Reference: https://axios-http.com/docs/post_example
     const updateThresholds = async () => {
         setIsUpdatingThresholds(true)
         try {
@@ -104,20 +111,20 @@ const Dashboard = () => {
             setIsUpdatingThresholds(false)
         }
     };
-
+//caluclation of threshold ranges for temperature and humidity
     const tempValue = data.temperature !== null
         ? Math.min(Math.max((data.temperature - thresholds.temperature_range[0]) / (thresholds.temperature_range[1] - thresholds.temperature_range[0]), 0), 1)
         : 0;
     const humValue = data.humidity !== null
         ? Math.min(Math.max((data.humidity / thresholds.humidity_range[0]) / (thresholds.humidity_range[1] - thresholds.humidity_range[0]), 0), 1)
         : 0;
-
+//Calculates the displayed CO2 value Reference:
     const co2Gradient = (value) => {
         const percentage = Math.min((value / 1000) * 100, 100);
 
         return `linear-gradient(to right, greem ${percentage - 50}%, yellow ${percentage - 20}%, red ${percentage}%)`
     };
-
+    //Not working yet but this track chat history of submitted queries
     const handleSendMessage = () => {
         if (!userInput.trim()) return;
         setChatHistory([...chatHistory, { sender: 'user', message: userInput }]);
@@ -129,7 +136,7 @@ const Dashboard = () => {
         ]);
         setUserInput('');
     };
-    return (
+    return ( //styling and structure for gauges,progress bars,and CO2 gradient percentage referenced above.This also is the sytling and customisation for the user preferences fo the range of temperature data
         <>
             {loading && <Spin size="large" />}
             <div style={{ display: 'flex', justifyContent: 'space-around', gap: '20px' }}>
@@ -199,7 +206,7 @@ const Dashboard = () => {
                         >
                             {chat.message}
                         </div>
-                    ))}
+                    ))} 
                 </div>
                 <Input
                     placeholder='Enter you question...'
@@ -268,7 +275,7 @@ const Dashboard = () => {
                 <Button type="primary" onClick={updateThresholds} style={{ marginTop: '16px' }}>
                     Update Thresholds
                 </Button>
-            </Card>
+            </Card>  
             <Card title="Temperature Trends" style={{ marginTop: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <p>Select Range:</p>
@@ -289,6 +296,6 @@ const Dashboard = () => {
                 </div>
             </Card>
         </>
-    );
+    ); 
 }
 export default Dashboard;
