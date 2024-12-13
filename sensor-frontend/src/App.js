@@ -9,6 +9,7 @@ import SettingsPage from './SettingsPage';
 import Alerts from './Alerts';
 import logo from './Icon-Only-Black.png'
 
+
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 

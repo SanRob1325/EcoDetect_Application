@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import GaugeChart from 'react-gauge-chart';
-import {Card, Slider, Button, Select, Spin,Progress } from 'antd';
-
+import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar } from 'antd';
+import { RobotOutlined, SendOutlined } from '@ant-design/icons'
+import chatbotIcon from './Icon-Only-Color.png'
 
 const { Option } = Select;
 
 const Dashboard = () => {
-    const [data, setData] = useState({ temperature: null, humidity: null,waterUsage: null,co2: null });
+    const [data, setData] = useState({ temperature: null, humidity: null, waterUsage: null, co2: null });
     const [temperatureTrends, setTemperatureTrends] = useState([]);
     const [co2Trends, setCo2Trends] = useState([]);
     const [thresholds, setThresholds] = useState({
@@ -18,11 +19,15 @@ const Dashboard = () => {
     const [selectedRange, setSelectedRange] = useState('24h');
     const [loading, setLoading] = useState(false)
     const [isUpdatingThresholds, setIsUpdatingThresholds] = useState(false);
+    const [isChatbotVisible, setIsChatbotVisible] = useState(false)
+    const [chatHistory, setChatHistory] = useState([
+        { sender: 'bot', message: 'Hello! How can I assist you today?' },]);
+    const [userInput, setUserInput] = useState('')
 
     const CPU_TEMPERATURE_OFFSET = 5;
 
     const normaliseTemperature = (temperature) => {
-        if(temperature === null) return null;
+        if (temperature === null) return null;
         return temperature - CPU_TEMPERATURE_OFFSET;
     }
 
@@ -32,11 +37,11 @@ const Dashboard = () => {
                 const response = await axios.get('http://localhost:5000/api/sensor-data')
                 const normalisedTemperature = normaliseTemperature(response.data.temperature)
                 setData({
-                    
+
                     ...response.data,
                     temperature: normalisedTemperature,
-                         
-            });
+
+                });
             } catch (error) {
                 console.error('Error fetching sensor data', error);
             } finally {
@@ -53,12 +58,12 @@ const Dashboard = () => {
             try {
                 const response = await axios.get(`http://localhost:5000/api/co2-trends?range=${selectedRange}`);
                 setCo2Trends(response.data);
-            }catch (error){
-                console.error('Error fetching CO2 trends',error);
+            } catch (error) {
+                console.error('Error fetching CO2 trends', error);
             }
         };
         fetchCo2Trends();
-    },[selectedRange]);
+    }, [selectedRange]);
 
     useEffect(() => {
         const fetchTrends = async () => {
@@ -104,14 +109,26 @@ const Dashboard = () => {
         ? Math.min(Math.max((data.temperature - thresholds.temperature_range[0]) / (thresholds.temperature_range[1] - thresholds.temperature_range[0]), 0), 1)
         : 0;
     const humValue = data.humidity !== null
-        ? Math.min(Math.max((data.humidity / thresholds.humidity_range[0]) / (thresholds.humidity_range[1] - thresholds.humidity_range[0]), 0), 1) 
+        ? Math.min(Math.max((data.humidity / thresholds.humidity_range[0]) / (thresholds.humidity_range[1] - thresholds.humidity_range[0]), 0), 1)
         : 0;
 
     const co2Gradient = (value) => {
-        const percentage = Math.min((value /1000) * 100, 100);
+        const percentage = Math.min((value / 1000) * 100, 100);
 
-        return `linear-gradient(to right, greem ${percentage - 50}%, yellow ${percentage -20}%, red ${percentage}%)`
-    }
+        return `linear-gradient(to right, greem ${percentage - 50}%, yellow ${percentage - 20}%, red ${percentage}%)`
+    };
+
+    const handleSendMessage = () => {
+        if (!userInput.trim()) return;
+        setChatHistory([...chatHistory, { sender: 'user', message: userInput }]);
+
+        setChatHistory((prev) => [
+            ...prev,
+            { sender: 'user', message: userInput },
+            { sender: 'bot', message: `You asked: ${userInput}` },
+        ]);
+        setUserInput('');
+    };
     return (
         <>
             {loading && <Spin size="large" />}
@@ -129,8 +146,8 @@ const Dashboard = () => {
                         percent={(data.waterUsage / 100) * 100}
                         status="active"
                         showInfo={true}
-                        />
-                        <p>{data.waterUsage !== null ? `${data.waterUsage} liters` : 'Loading...'}</p>
+                    />
+                    <p>{data.waterUsage !== null ? `${data.waterUsage} litres` : 'Loading...'}</p>
                 </Card>
                 <Card title="Current Co2 Levels"
                     style={{
@@ -138,39 +155,92 @@ const Dashboard = () => {
                         color: '#fff',
                         padding: '20px',
                         textAlign: 'center',
-                    }} 
-                    >
-                        <h2>{data.co2 ? `${data.co2} ppm` : 'Loading...'} </h2>
-                    </Card>          
+                    }}
+                >
+                    <h2>{data.co2 ? `${data.co2} ppm` : 'Loading...'} </h2>
+                </Card>
             </div>
-            <Card title="CO2 Trends" style={{marginTop: '16px'}}>
-               <div style={{display :"flex", justifyContent: 'space-between', alignItems: 'center'}}>
-                <p>Select Range</p>
-                <Select
-                    defaultValue="days"
-                    onChange={(value) => selectedRange(value)}
-                    style={{ width: '150px'}}
+            {/*Chatbot opens */}
+            <Button
+                type="primary"
+                shape="circle"
+                icon={<RobotOutlined />}
+                style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1000, backgroundColor: '#1890ff', color: '#fff' }}
+                onClick={() => setIsChatbotVisible(true)}
+            />
+            {/*Chatbot Modal*/}
+            <Modal
+
+                title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Avatar src={chatbotIcon} alt="Chatbot Icon" />
+                        <span>AI Chatbot</span>
+                    </div>
+                }
+                open={isChatbotVisible}
+                onCancel={() => setIsChatbotVisible(false)}
+                footer={null}
+                width={400}
+            >
+                <div style={{ height: '300px', overflowY: 'auto', marginBottom: '10px' }}>
+                    {/* implementation still being worked on*/}
+                    {chatHistory.map((chat, index) => (
+                        <div
+                            key={index}
+                            style={{
+                                textAlign: chat.sender === 'user' ? 'right' : 'left',
+                                margin: '5px 0',
+                                padding: '5px 10px',
+                                borderRadius: '10px',
+                                backgroundColor: chat.sender === 'user' ? '#e6f7ff' : '#f5f5f5',
+                                display: 'inline-block',
+                                maxWidth: '80%',
+                            }}
+                        >
+                            {chat.message}
+                        </div>
+                    ))}
+                </div>
+                <Input
+                    placeholder='Enter you question...'
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onPressEnter={handleSendMessage}
+                    addonAfter={
+                        <Button type="primary" icon={<SendOutlined />} onClick={handleSendMessage}>
+                            Send
+                        </Button>
+                    }
+                />
+            </Modal>
+            <Card title="CO2 Trends" style={{ marginTop: '16px' }}>
+                <div style={{ display: "flex", justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p>Select Range</p>
+                    <Select
+                        defaultValue="days"
+                        onChange={(value) => setSelectedRange(value)}
+                        style={{ width: '150px' }}
                     >
                         <Option value="days">Daily</Option>
                         <Option value="months">Monthly</Option>
                     </Select>
-               </div>
-               <div style={{display: 'flex',flexWrap: 'wrap',gap: '10px', marginTop: '20px'}}>
-                {co2Trends.map((trend, index) => (
-                    <Card
-                        key={index}
-                        style={{
-                            background: co2Gradient(trend.co2),
-                            color: '#fff',
-                            width: '150px',
-                            textAlign: 'center',
-                        }}
-                    >
-                        <p>{selectedRange === 'days' ? trend.day :trend.month}</p>
-                        <h3>{trend.co2} ppm</h3>
-                    </Card>
-                ))}
-               </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '20px' }}>
+                    {co2Trends.map((trend, index) => (
+                        <Card
+                            key={index}
+                            style={{
+                                background: co2Gradient(trend.co2),
+                                color: '#fff',
+                                width: '150px',
+                                textAlign: 'center',
+                            }}
+                        >
+                            <p>{selectedRange === 'days' ? trend.day : trend.month}</p>
+                            <h3>{trend.co2} ppm</h3>
+                        </Card>
+                    ))}
+                </div>
             </Card>
             <Card title="Preffered Ranges" style={{ marginTop: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-around' }}>
