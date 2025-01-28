@@ -8,7 +8,19 @@ import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
 const { Option } = Select;
 //Stores sensor data such as temperature,humidity,water usage and CO2 leves
 const Dashboard = () => {
-    const [data, setData] = useState({ temperature: null, humidity: null, waterUsage: null, co2: null });
+    const [data, setData] = useState({ 
+        temperature: null,
+        humidity: null,
+        waterUsage: null,
+        co2: null,
+        pressure: null,
+        altitude: null,
+        imu: { 
+            acceleration: [0,0,0],
+            gyroscope: [0,0,0],
+            magnetometer: [0,0,0],
+        },
+     });
     const [temperatureTrends, setTemperatureTrends] = useState([]);
     const [co2Trends, setCo2Trends] = useState([]);
     const [thresholds, setThresholds] = useState({
@@ -35,7 +47,7 @@ const Dashboard = () => {
     const normaliseTemperature = (temperature) => {
         if (temperature === null) return null;
         return temperature - CPU_TEMPERATURE_OFFSET;
-    }
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -141,12 +153,64 @@ const Dashboard = () => {
             {loading && <Spin size="large" />}
             <div style={{ display: 'flex', justifyContent: 'space-around', gap: '20px' }}>
                 <Card title="Temperature">
+                    <p style={{fontSize: '12px',color: 'gray'}}>
+                        Monitors room temperature to optimize heating/cooling systems and reduce energy use and carbon footprint
+                    </p>
                     <GaugeChart id="temperature-gauge" nrOfLevels={20} percent={tempValue} needleBaseColor="red" needleColor='red' />
-                    <p>{data.temperature !== null ? `${data.temperature.toFixed(2)}°C` : 'Loading...'}</p>
+                    <p>{data.temperature !== null && data.temperature !== undefined ? `${data.temperature.toFixed(2)}°C` : 'Loading...'}</p>
                 </Card>
                 <Card title="Humidity">
+                    <p style={{fontSize: '12px', color:'gray'}}>
+                        Measures humidity to maintain optimal levels of storage greenhouse environments reducing waste
+                    </p>
                     <GaugeChart id="humidity-gauge" nrOfLevels={20} percent={humValue} needleBaseColor="blue" needleColor="blue" />
-                    <p>{data.humidity !== null ? `${data.humidity.toFixed(2)}%` : 'Loading...'}</p>
+                    <p>{data.humidity !== null && data.humidity !== undefined ? `${data.humidity.toFixed(2)}%` : 'Loading...'}</p>
+                </Card>
+                <Card title="Barometric Pressure">
+                <p style={{ fontSize: '12px', color: 'gray'}}>
+                        Provides weather insights and helps scheduling operations efficiently, reducing eneccessary energy usage
+                    </p>
+                    <Progress
+                        percent={data.pressure !== null && data.pressure !== undefined ? Math.min((data.pressure / 1100) * 100, 100) : 0} // Max 1100 hPa
+                        status = "active"
+                        showInfo ={true}
+                    />
+                    <p>{data.pressure !== null && data.pressure !== undefined ? `${data.pressure.toFixed(2)} hPa` : 'Loading..'}</p>
+                </Card>
+                <Card title="Altitude">
+                    <p style={{ fontSize: '12px', color: 'gray'}}>
+                        Tracks changes to elevation, which can impact energy consumption for machiner and transport, inirectly influencing emissions
+                    </p>
+                    <Progress
+                        percent={data.altitude !== null && data.altitude !== undefined ? Math.min((data.altitude / 5000) * 100, 100) : 0} // Max 5000 meters
+                        status="active"
+                        showInfo={true}
+                    />
+                    <p>{data.altitude !== null && data.altitude !== undefined ? `${data.altitude.toFixed(2)} m` : 'Loading..'}</p>
+                </Card>
+                <Card title="IMU Data">
+                    <p style={{ fontsize: '12px', color: 'gray'}}>
+                        Measures equipment usage and driving behaviou and asset tracking to improve operation efficiency and reduce carbon footprint
+                    </p>
+                    <p>Acceleration (m/s²)</p>
+                    <Progress 
+                        percent={data.imu && data.imu.acceleration && data.imu.acceleration[0] !== undefined ? Math.min(Math.abs(data.imu.acceleration[0]), 100) :0 }
+                        status="active"
+                        showInfo={true}
+                    />
+                    <p>Gyroscope (°/s):</p>
+                    <Progress
+                        percent={data.imu && data.imu.gyroscope && data.imu.gyroscope[0] !== undefined ? Math.min(Math.abs(data.imu.gyroscope[0]), 100) :0}
+                        status="active"
+                        showInfo={true}
+                    />
+
+                    <p>Magnetometer (μT):</p>
+                    <Progress
+                        percent={data.imu && data.magnetometer && data.imu.magnetometer[0] !== undefined ? Math.min(Math.abs(data.imu.magnetometer[0]), 100) :0}
+                        status="active"
+                        showInfo={true}
+                    />
                 </Card>
                 <Card title="Water Usage">
                     <Progress
@@ -154,17 +218,7 @@ const Dashboard = () => {
                         status="active"
                         showInfo={true}
                     />
-                    <p>{data.waterUsage !== null ? `${data.waterUsage} litres` : 'Loading...'}</p>
-                </Card>
-                <Card title="Current Co2 Levels"
-                    style={{
-                        background: co2Gradient(data.co2 || 0),
-                        color: '#fff',
-                        padding: '20px',
-                        textAlign: 'center',
-                    }}
-                >
-                    <h2>{data.co2 ? `${data.co2} ppm` : 'Loading...'} </h2>
+                    <p>{data.waterUsage !== null && data.altitude !== undefined ? `${data.waterUsage} litres` : 'Loading...'}</p>
                 </Card>
             </div>
             {/*Chatbot opens */}
