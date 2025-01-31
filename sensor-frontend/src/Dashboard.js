@@ -21,6 +21,8 @@ const Dashboard = () => {
             magnetometer: [0,0,0],
         },
      });
+    const [waterFlow, setWaterFlow] = useState(null);
+    const [carbonFootprint, setCarbonFootprint] = useState(0);
     const [temperatureTrends, setTemperatureTrends] = useState([]);
     const [co2Trends, setCo2Trends] = useState([]);
     const [thresholds, setThresholds] = useState({
@@ -52,8 +54,9 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await axios.get('http://localhost:5000/api/sensor-data')
-                const normalisedTemperature = normaliseTemperature(response.data.temperature)
+                setLoading(true);
+                const response = await axios.get('http://localhost:5000/api/sensor-data');
+                const normalisedTemperature = normaliseTemperature(response.data.temperature);
                 setData({
 
                     ...response.data,
@@ -70,6 +73,23 @@ const Dashboard = () => {
         const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        const fetchWaterFlowData = async () => {
+            try {
+                const response = await axios.get(`http://localhost:5000/api/latest-sensor-data`);
+                setWaterFlow(response.data.yf401)
+            } catch (error) {
+                console.error('Error fetching water flow data', error);
+            }
+        };
+            fetchWaterFlowData();
+            const interval = setInterval(fetchWaterFlowData, 5000);
+            return () => clearInterval(interval);
+        }, []);
+        
+
+
 //fetches ranges for co2 and temperature  References:https://blog.logrocket.com/understanding-axios-get-requests/
     useEffect(() => {
         const fetchCo2Trends = async () => {
@@ -123,6 +143,28 @@ const Dashboard = () => {
             setIsUpdatingThresholds(false)
         }
     };
+
+    const calculateCarbonFootprint = () => {
+        if (data.temperature !== null && waterFlow !== null) {
+            let footprint = (data.temperature * 0.2) + (waterFlow * 0.5);
+
+            if(data.altitude !== null){
+                footprint += data.altitude * 0.1;
+            }
+
+            if(data.pressure !== null){
+                footprint += data.pressure * 0.05;
+            }
+            return Math.min(footprint, 100);
+        }
+
+        return 0;
+    }
+
+    useEffect(() => {
+        setCarbonFootprint(calculateCarbonFootprint());
+    }, [data, waterFlow])
+
 //caluclation of threshold ranges for temperature and humidity
     const tempValue = data.temperature !== null
         ? Math.min(Math.max((data.temperature - thresholds.temperature_range[0]) / (thresholds.temperature_range[1] - thresholds.temperature_range[0]), 0), 1)
@@ -134,7 +176,7 @@ const Dashboard = () => {
     const co2Gradient = (value) => {
         const percentage = Math.min((value / 1000) * 100, 100);
 
-        return `linear-gradient(to right, greem ${percentage - 50}%, yellow ${percentage - 20}%, red ${percentage}%)`
+        return `linear-gradient(to right, green ${percentage - 50}%, yellow ${percentage - 20}%, red ${percentage}%)`
     };
     //Not working yet but this track chat history of submitted queries
     const handleSendMessage = () => {
@@ -204,10 +246,9 @@ const Dashboard = () => {
                         status="active"
                         showInfo={true}
                     />
-
                     <p>Magnetometer (μT):</p>
                     <Progress
-                        percent={data.imu && data.magnetometer && data.imu.magnetometer[0] !== undefined ? Math.min(Math.abs(data.imu.magnetometer[0]), 100) :0}
+                        percent={data.imu && data.imu.magnetometer && data.imu.magnetometer[0] !== undefined ? Math.min(Math.abs(data.imu.magnetometer[0]), 100) :0}
                         status="active"
                         showInfo={true}
                     />
@@ -218,7 +259,15 @@ const Dashboard = () => {
                         status="active"
                         showInfo={true}
                     />
-                    <p>{data.waterUsage !== null && data.altitude !== undefined ? `${data.waterUsage} litres` : 'Loading...'}</p>
+                    <p>{data.waterUsage !== null && data.waterUsage !== undefined ? `${data.waterUsage} litres` : 'Loading...'}</p>
+                </Card>
+                <Card title="Carbon Footprint Impact">
+                    <Progress 
+                        percent={carbonFootprint}
+                        status="active"
+                        showInfo={true}
+                    />
+                    <p>{carbonFootprint.toFixed(2)}% environmental impact</p>
                 </Card>
             </div>
             {/*Chatbot opens */}

@@ -7,7 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from sense_hat import SenseHat
 import openai
-from datetime import datetime,timedelta
+from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
 import logging
 from bson import ObjectId
@@ -15,20 +15,27 @@ import boto3
 import paho.mqtt.client as mqtt
 from cloud_services.cognito.cognito_service import verify_token
 from functools import wraps
+import json
 
 #logging setup for debugging and operational visibility
-logging.basicConfig(level=logging.DEBUG)
 load_dotenv()
-
+logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 CORS(app)
 
 #Database setup in MongoDB for storing sensor data,thresholds and alert history
-client = MongoClient("mongodb://localhost:27017")
+client = MongoClient(os.getenv("MONGO_URI"))
 db = client.ecodetect
 sensor_data_collection = db.sensor_data
 thresholds_collection = db.thresholds
 alert_history_collection = db.alert_history
+water_data_collection = db.water_data
+
+IOT_ENDPOINT = os.getenv("IOT_ENDPOINT")
+IOT_TOPIC = os.getenv("IOT_TOPIC")
+CERTIFICATE_PATH = os.getenv("CERTIFICATE_PATH")
+PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH")
+ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
 
 #AWS SNS setup for sending alerts
 sns_client = boto3.client('sns',region_name='eu-west')
@@ -39,7 +46,7 @@ thresholds = thresholds_collection.find_one()
 #prints thresholds for testing puposes
 print(thresholds)
 #SENSE-HAT is initailised for sensor readings
-sensor = SenseHat()
+
 
 #openai setup for prototype and testing purposes.AI assitant capabilities are tested here
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -55,6 +62,49 @@ latest_co2_data = None
 latest_flow_data = None
 #function to get thresholds,falling back to deafts if non are set
 
+def on_message(client, userdata, message):
+    try:
+        data = json.loads(message.payload)
+        data["timestamp"] = datetime.now(timezone.utc)
+        
+        logging.info(f"Recieved Water Data: {data}")
+        
+        water_data_collection.insert_one(data)
+    except Exception as e:
+        logging.error(f"Error processing water data: {str(e)}")
+        
+mqtt_client = mqtt.Client()
+mqtt_client.tls_set(ROOT_CA_PATH, certfile=CERTIFICATE_PATH, keyfile=PRIVATE_KEY_PATH)
+mqtt_client.on_message = on_message
+
+try:
+    mqtt_client.connect(IOT_ENDPOINT, 8883, 60)
+    mqtt_client.subscribe(IOT_TOPIC)
+    mqtt_client.loop_start()
+    
+except Exception as e:
+    logging.error(f"Failed to connect to AWS IoT Core: {str(e)}")
+
+#Sense Hat temperature, humidity, pressure    
+sensor = SenseHat()
+
+@app.route('/api/water-usage', methods=['GET'])
+def get_water_usage():
+    """Fetch latest water flow data"""
+    try:
+        latest_data = water_data_collection.find_one(sort=[("timestamp", -1)])
+        
+        if latest_data:
+            return jsonify({
+                "flow_rate": latest_data["flow_rate"],
+                "timestamp": latest_data["timestamp"].isoformat()
+            })
+        return jsonify({"message": "No water data available"}), 404
+    except Exception as e:
+        logging.error(f"Error fetching water data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+    
 def normalize_sensor_data(data):
     normalized_data = {}
     
@@ -127,7 +177,6 @@ def recieve_sensor_data():
 @app.route('/api/latest-sensor-data', methods=['GET'])
 def get_latest_sensor_data():
     return jsonify({
-        "mq135": latest_co2_data,
         "yf401": latest_flow_data
     })   
     
@@ -202,6 +251,7 @@ def get_sensor_data():
     try:
         temperature = sensor.get_temperature()
         humidity = sensor.get_humidity()
+        pressure = sensor.get_pressure()
         
         if temperature is None:
             logging.warning("Temperature reading is None.Using fallback values")
@@ -224,7 +274,6 @@ def get_sensor_data():
             logging.warning("CPU temperature unavailable,using raw temperature")
             normalized_temperature = round(temperature,2)
         
-        pressure = sensor.get_pressure()
         if pressure is None:
             logging.warning("Pressure reading is None,using fallback of 1013.25")
             pressure = 1013.25
@@ -262,9 +311,25 @@ def get_sensor_data():
     except Exception as e:
         logging.error(f"Error in /api/sensor-data: {str(e)}")
         return jsonify({"Failed to insert sensor data": str(e)}),500
+
+@app.route('/api/carbon-footprint', methods=['GET'])
+def get_calculate_footprint():
+    """Returns the latests carbon footprint calculations"""        
+    try:
+        latest_data = sensor_data_collection.find_one(sort=[("timestamp", -1)])
         
+        if latest_data:
+            return jsonify({
+                "carbon_footprint": latest_data.get("carbon_footprint", 0),
+                "timestamp": latest_data["timestamp"].isoformat()
+            })
+        return jsonify({"message": "No carbon footprint data available"}), 404
+    except Exception as e:
+        logging.error(f"Error fetching carbon footprint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
 def get_cpu_temperature():
-    """Read from the systems CPU temperatur to normalise SENSE-HAT readings Reference:https://www.kernel.org/doc/Documentation/thermal/sysfs-api.txt and https://emlogic.no/2024/09/step-by-step-thermal-management/"""
+    """Read from the systems CPU temperature to normalise SENSE-HAT readings Reference:https://www.kernel.org/doc/Documentation/thermal/sysfs-api.txt and https://emlogic.no/2024/09/step-by-step-thermal-management/"""
     file_path = "sys/class/thermal/thermal_zone0/temp"
 
     try:
