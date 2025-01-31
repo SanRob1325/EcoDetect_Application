@@ -10,7 +10,6 @@ import openai
 from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
 import logging
-from bson import ObjectId
 import boto3
 import paho.mqtt.client as mqtt
 from cloud_services.cognito.cognito_service import verify_token
@@ -39,7 +38,7 @@ ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
 
 #AWS SNS setup for sending alerts
 sns_client = boto3.client('sns',region_name='eu-west')
-SNS_TOPIC_ARN= 'arn:aws:sns:eu-west-1:442042527353:HumidityAlertsTopic'
+SNS_TOPIC_ARN= os.getenv("SNS_TOPIC_ARN")
 #Retrieve thresholds if the defauls are not set
 thresholds = thresholds_collection.find_one()
 
