@@ -61,11 +61,24 @@ latest_co2_data = None
 latest_flow_data = None
 #function to get thresholds,falling back to deafts if non are set
 
+def calculate_carbon_footprint(data):
+    """Calcualates carbon footprint"""
+    footprint = 0
+    if "temperature" in data:
+        footprint += data["temperature"] * 0.2
+    if "flow_rate" in data:
+        footprint += data["flow_rate"] * 0.5
+    if "altitude" in data:
+        footprint += data["altitude"] * 0.1
+    if "pressure" in data:
+        footprint += data["pressure"] * 0.05
+    return min(footprint, 100) # up to 100%
+
 def on_message(client, userdata, message):
     try:
         data = json.loads(message.payload)
         data["timestamp"] = datetime.now(timezone.utc)
-        
+        latest_flow_data = data["flow_rate"]
         logging.info(f"Recieved Water Data: {data}")
         
         water_data_collection.insert_one(data)
@@ -80,7 +93,6 @@ try:
     mqtt_client.connect(IOT_ENDPOINT, 8883, 60)
     mqtt_client.subscribe(IOT_TOPIC)
     mqtt_client.loop_start()
-    
 except Exception as e:
     logging.error(f"Failed to connect to AWS IoT Core: {str(e)}")
 
@@ -92,7 +104,6 @@ def get_water_usage():
     """Fetch latest water flow data"""
     try:
         latest_data = water_data_collection.find_one(sort=[("timestamp", -1)])
-        
         if latest_data:
             return jsonify({
                 "flow_rate": latest_data["flow_rate"],
@@ -163,7 +174,6 @@ def recieve_sensor_data():
     try:
         raw_data = request.json
         normalized_data = normalize_sensor_data(raw_data)
-        
         #add time stamp
         normalized_data['timestamp'] = datetime.now()
         
@@ -318,6 +328,7 @@ def get_calculate_footprint():
         latest_data = sensor_data_collection.find_one(sort=[("timestamp", -1)])
         
         if latest_data:
+            carbon_footprint = latest_data.get("carbon_footprint", 0)
             return jsonify({
                 "carbon_footprint": latest_data.get("carbon_footprint", 0),
                 "timestamp": latest_data["timestamp"].isoformat()
@@ -364,11 +375,7 @@ def set_thresholds():
         data = request.json
         temperature_range = data.get('temperature_range',default_temperature_range)
         humidity_range = data.get('humidity_range',default_humidity_range)
-        
-        if len(temperature_range) != 2 or temperature_range[0] >= temperature_range[1]:
-            return jsonify({"error": "Invalid temperature"}), 400
-        if len(humidity_range) != 2 or humidity_range[0] >= humidity_range[1]:
-            return jsonify({"error": "Invalid temperature"}), 400
+
         thresholds ={
             "temperature_range": temperature_range,
             "humidity_range": humidity_range

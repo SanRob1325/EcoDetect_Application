@@ -104,6 +104,20 @@ const Dashboard = () => {
     }, [selectedRange]);
 
     useEffect(() => {
+        const fetchCarbonFootprint = async () => {
+            try{
+                const response = await axios.get('http://localhost:5000/api/carbon-footprint');
+                setCarbonFootprint(response.data.carbon_footprint);
+            } catch (error){
+                console.error('Error fetching carbon footprint', error);
+            }
+        };
+        fetchCarbonFootprint();
+        const interval = setInterval(fetchCarbonFootprint, 5000)
+        return () => clearInterval(interval);
+    },[])
+
+    useEffect(() => {
         const fetchTrends = async () => {
             try {
                 const response = await axios.get(`http://localhost:5000/api/temperature-trends?range=${selectedRange}`);
@@ -380,7 +394,7 @@ const Dashboard = () => {
                 </Button>
             </Card>  
             <Card title="Temperature Trends" style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',marginBottom: '10px' }}>
                     <p>Select Range:</p>
                     <Select defaultValue="24h" onChange={(value) => setSelectedRange(value)} style={{ width: '150px' }}>
                         <Option value="24h">Last 24 Hours</Option>
