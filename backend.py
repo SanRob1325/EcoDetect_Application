@@ -22,6 +22,12 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 CORS(app)
 
+dynamodb = boto3.resource("dynamodb")
+sns_client = boto3("sns", region_name="eu-west-1")
+ses_client = boto3("ses",region_name="eu-west-1")
+
+SENSOR_TABLE = os.getenv("SENSOR_TABLE", "SenseHatData")
+THRESHOLD_TABLE = os.getenv("")
 #Database setup in MongoDB for storing sensor data,thresholds and alert history
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client.ecodetect
@@ -39,6 +45,9 @@ ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
 #AWS SNS setup for sending alerts
 sns_client = boto3.client('sns',region_name='eu-west')
 SNS_TOPIC_ARN= os.getenv("SNS_TOPIC_ARN")
+SES_EMAIL_RECIPIENT = os.getenv("SES_EMAIL_RECIPIENT")
+SES_EMAIL_SENDER = os.getenv("SES_EMAIL_SENDER")
+
 #Retrieve thresholds if the defauls are not set
 thresholds = thresholds_collection.find_one()
 
@@ -325,18 +334,37 @@ def get_sensor_data():
 def get_calculate_footprint():
     """Returns the latests carbon footprint calculations"""        
     try:
-        latest_data = sensor_data_collection.find_one(sort=[("timestamp", -1)])
-        
+        latest_data = sensor_data_collection.find_one(sort=[("timestamp", -1)])  
         if latest_data:
-            carbon_footprint = latest_data.get("carbon_footprint", 0)
             return jsonify({
-                "carbon_footprint": latest_data.get("carbon_footprint", 0),
+                "carbon_footprint": calculate_carbon_footprint(latest_data),
                 "timestamp": latest_data["timestamp"].isoformat()
             })
         return jsonify({"message": "No carbon footprint data available"}), 404
     except Exception as e:
         logging.error(f"Error fetching carbon footprint: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
+def send_sns_alert(message):
+    try:
+        sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=message, Subject="Threshold Alert")
+        logging.info(f"SNS Alert Sent: {message}")
+    except Exception as e:
+        logging.error(f"Error sending SNS alert:{str(e)}")
+        
+def send_ses_email(message):
+    try:
+        ses_client.email(
+            Source=SES_EMAIL_SENDER,
+            Destination={"ToAddress": [SES_EMAIL_RECIPIENT]},
+            Message={
+                "Subject": {"Data": "Threshold Alert"},
+                "Body": {"Text": {"Data": message}}
+            }
+        )
+        logging.info(f"SES Email Sent: {message}")
+    except Exception as e:
+        logging.error(f"Error sending SES email: {str(e)}")
     
 def get_cpu_temperature():
     """Read from the systems CPU temperature to normalise SENSE-HAT readings Reference:https://www.kernel.org/doc/Documentation/thermal/sysfs-api.txt and https://emlogic.no/2024/09/step-by-step-thermal-management/"""
