@@ -1,7 +1,5 @@
 from flask import Flask,jsonify,request
 from flask_cors import CORS
-#from flask_mail import Mail,Message
-#from twilio.rest import Client
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -22,12 +20,15 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 CORS(app)
 
-dynamodb = boto3.resource("dynamodb")
-sns_client = boto3("sns", region_name="eu-west-1")
-ses_client = boto3("ses",region_name="eu-west-1")
+dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
+sns_client = boto3.client("sns", region_name="eu-west-1")
+ses_client = boto3.client("ses",region_name="eu-west-1")
 
 SENSOR_TABLE = os.getenv("SENSOR_TABLE", "SenseHatData")
-THRESHOLD_TABLE = os.getenv("")
+THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
+sensor_table = dynamodb.Table(SENSOR_TABLE)
+threshold_table = dynamodb.Table(THRESHOLD_TABLE)
+
 #Database setup in MongoDB for storing sensor data,thresholds and alert history
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client.ecodetect
@@ -50,7 +51,8 @@ SES_EMAIL_SENDER = os.getenv("SES_EMAIL_SENDER")
 
 #Retrieve thresholds if the defauls are not set
 thresholds = thresholds_collection.find_one()
-
+#Sense Hat temperature, humidity, pressure    
+sensor = SenseHat()
 #prints thresholds for testing puposes
 print(thresholds)
 #SENSE-HAT is initailised for sensor readings
@@ -105,20 +107,23 @@ try:
 except Exception as e:
     logging.error(f"Failed to connect to AWS IoT Core: {str(e)}")
 
-#Sense Hat temperature, humidity, pressure    
-sensor = SenseHat()
-
 @app.route('/api/water-usage', methods=['GET'])
 def get_water_usage():
     """Fetch latest water flow data"""
     try:
-        latest_data = water_data_collection.find_one(sort=[("timestamp", -1)])
-        if latest_data:
-            return jsonify({
-                "flow_rate": latest_data["flow_rate"],
-                "timestamp": latest_data["timestamp"].isoformat()
-            })
-        return jsonify({"message": "No water data available"}), 404
+        table = dynamodb.Table("WaterFlowData")
+        response = table.scan(Limit=1)
+        items = response.get("Items", [])
+        
+        if not items:     
+            return jsonify({"message": "No water data available"}), 404
+        
+        latest_data = items[0]
+        return jsonify({
+            "flow_rate": latest_data.get("flow_rate", "N/A"),
+            "timestamp": latest_data.get("timestamp", "N/A"),
+            "unit": latest_data.get("unit", "L/min")
+        })
     except Exception as e:
         logging.error(f"Error fetching water data: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -346,8 +351,15 @@ def get_calculate_footprint():
         return jsonify({"error": str(e)}), 500
     
 def send_sns_alert(message):
+    sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=message, Subject="Threshold Alert")
+    """Fetch latest water flow data"""
     try:
-        sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=message, Subject="Threshold Alert")
+        latest_data = water_data_collection.find_one(sort=[("timestamp", -1)])
+        if latest_data:
+            return jsonify({
+                "flow_rate": latest_data["flow_rate"],
+                "timestamp": latest_data["timestamp"].isoformat()
+            })
         logging.info(f"SNS Alert Sent: {message}")
     except Exception as e:
         logging.error(f"Error sending SNS alert:{str(e)}")

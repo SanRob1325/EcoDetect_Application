@@ -77,8 +77,8 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchWaterFlowData = async () => {
             try {
-                const response = await axios.get(`http://localhost:5000/api/latest-sensor-data`);
-                setWaterFlow(response.data.yf401)
+                const response = await axios.get(`http://localhost:5000/api/water-usage`);
+                setWaterFlow(response.data.flow_rate);
             } catch (error) {
                 console.error('Error fetching water flow data', error);
             }

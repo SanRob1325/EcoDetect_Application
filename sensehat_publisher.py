@@ -68,7 +68,7 @@ def read_sensor_data():
                     "y": round(imu["acceleration"]["y"], 2),
                     "z": round(imu["acceleration"]["z"], 2),
                 },
-                "agyroscope": {
+                "gyroscope": {
                     "x": round(imu["gyroscope"]["x"], 2),
                     "y": round(imu["gyroscope"]["y"], 2),
                     "z": round(imu["gyroscope"]["z"], 2),
