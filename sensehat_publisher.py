@@ -37,20 +37,50 @@ except Exception as e:
     exit(1)
 
 sensor = SenseHat()
+CORRECTION_FACTOR = -5.4
+ALPHA = 0.2 #Normalises factor for IMU data
 
+prev_imu = {
+    "acceleration": {"x": 0, "y": 0, "z":0},
+    "gyroscope": {"x": 0, "y": 0, "z": 0},
+    "magnetometer": {"x": 0, "y": 0, "z": 0},
+}
+
+def low_pass_filter(new_value, prev_value):
+    """Applies low pass filter to smooth sensor readings"""
+    return(ALPHA * new_value) + ((1 - ALPHA) * prev_value)
 
 def read_sensor_data():
     """Reading data from SENSE HAT"""
     try:
         
-        temperature = sensor.get_temperature()
-        humidity = sensor.get_humidity()
-        pressure = sensor.get_pressure()
+        temperature = sensor.get_temperature_from_humidity() + CORRECTION_FACTOR
+        humidity_values = [sensor.get_humidity() for _ in range(5)]
+        humidity = round(sum(humidity_values) / len(humidity_values), 2)
         
-        imu = {
-            "acceleration": sensor.get_accelerometer_raw(),
-            "gyroscope": sensor.get_gyroscope_raw(),
-            "magnetometer": sensor.get_compass_raw()
+        pressure_values = [sensor.get_pressure() for _ in range(5)]
+        pressure = round(sum(pressure_values) / len(pressure_values), 2)
+        
+        acceleration = sensor.get_accelerometer_raw()
+        gyroscope = sensor.get_gyroscope_raw()
+        magnetometer = sensor.get_compass_raw()
+        
+        filtered_imu = {
+            "acceleration": {
+                "x": round(low_pass_filter(acceleration["x"], prev_imu["acceleration"]["x"]), 2),
+                "y": round(low_pass_filter(acceleration["y"], prev_imu["acceleration"]["y"]), 2),
+                "z": round(low_pass_filter(acceleration["z"], prev_imu["acceleration"]["z"]), 2),
+            },
+            "gyroscope": {
+                "x": round(low_pass_filter(gyroscope["x"], prev_imu["gyroscope"]["x"]), 2),
+                "y": round(low_pass_filter(gyroscope["y"], prev_imu["gyroscope"]["y"]), 2),
+                "z": round(low_pass_filter(gyroscope["z"], prev_imu["gyroscope"]["z"]), 2),
+            },
+            "magnetometer": {
+                "x": round(low_pass_filter(magnetometer["x"], prev_imu["magnetometer"]["x"]), 2),
+                "y": round(low_pass_filter(magnetometer["y"], prev_imu["magnetometer"]["y"]), 2),
+                "z": round(low_pass_filter(magnetometer["z"], prev_imu["magnetometer"]["z"]), 2),
+            },
         }
         
         current_time = int(time.time())
@@ -60,28 +90,13 @@ def read_sensor_data():
             "device_id": THING_NAME2,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "temperature": round(temperature, 2),
-            "humidity": round(humidity, 2),
-            "pressure": round(pressure, 2),
-            "imu": {
-                "acceleration": {
-                    "x": round(imu["acceleration"]["x"], 2),
-                    "y": round(imu["acceleration"]["y"], 2),
-                    "z": round(imu["acceleration"]["z"], 2),
-                },
-                "gyroscope": {
-                    "x": round(imu["gyroscope"]["x"], 2),
-                    "y": round(imu["gyroscope"]["y"], 2),
-                    "z": round(imu["gyroscope"]["z"], 2),
-                },
-                "magnetometer": {
-                    "x": round(imu["magnetometer"]["x"], 2),
-                    "y": round(imu["magnetometer"]["y"], 2),
-                    "z": round(imu["magnetometer"]["z"], 2),
-                }, 
-            },
+            "humidity": humidity,
+            "pressure": pressure,
+            "imu": filtered_imu,
             "ttl_timestamp": ttl_time
+             
         }
-        
+                
         return sensor_data
     
     except Exception as e:

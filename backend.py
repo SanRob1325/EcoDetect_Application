@@ -24,7 +24,7 @@ dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
 sns_client = boto3.client("sns", region_name="eu-west-1")
 ses_client = boto3.client("ses",region_name="eu-west-1")
 
-SENSOR_TABLE = os.getenv("SENSOR_TABLE", "SenseHatData")
+SENSOR_TABLE = os.getenv("SENSOR_TABLE", "WaterFlowData")
 THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
 sensor_table = dynamodb.Table(SENSOR_TABLE)
 threshold_table = dynamodb.Table(THRESHOLD_TABLE)
@@ -37,8 +37,6 @@ thresholds_collection = db.thresholds
 alert_history_collection = db.alert_history
 water_data_collection = db.water_data
 
-IOT_ENDPOINT = os.getenv("IOT_ENDPOINT")
-IOT_TOPIC = os.getenv("IOT_TOPIC")
 CERTIFICATE_PATH = os.getenv("CERTIFICATE_PATH")
 PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH")
 ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
@@ -85,50 +83,6 @@ def calculate_carbon_footprint(data):
         footprint += data["pressure"] * 0.05
     return min(footprint, 100) # up to 100%
 
-def on_message(client, userdata, message):
-    try:
-        data = json.loads(message.payload)
-        data["timestamp"] = datetime.now(timezone.utc)
-        latest_flow_data = data["flow_rate"]
-        logging.info(f"Recieved Water Data: {data}")
-        
-        water_data_collection.insert_one(data)
-    except Exception as e:
-        logging.error(f"Error processing water data: {str(e)}")
-        
-mqtt_client = mqtt.Client()
-mqtt_client.tls_set(ROOT_CA_PATH, certfile=CERTIFICATE_PATH, keyfile=PRIVATE_KEY_PATH)
-mqtt_client.on_message = on_message
-
-try:
-    mqtt_client.connect(IOT_ENDPOINT, 8883, 60)
-    mqtt_client.subscribe(IOT_TOPIC)
-    mqtt_client.loop_start()
-except Exception as e:
-    logging.error(f"Failed to connect to AWS IoT Core: {str(e)}")
-
-@app.route('/api/water-usage', methods=['GET'])
-def get_water_usage():
-    """Fetch latest water flow data"""
-    try:
-        table = dynamodb.Table("WaterFlowData")
-        response = table.scan(Limit=1)
-        items = response.get("Items", [])
-        
-        if not items:     
-            return jsonify({"message": "No water data available"}), 404
-        
-        latest_data = items[0]
-        return jsonify({
-            "flow_rate": latest_data.get("flow_rate", "N/A"),
-            "timestamp": latest_data.get("timestamp", "N/A"),
-            "unit": latest_data.get("unit", "L/min")
-        })
-    except Exception as e:
-        logging.error(f"Error fetching water data: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-    
-    
 def normalize_sensor_data(data):
     normalized_data = {}
     
@@ -240,6 +194,36 @@ def get_notifications():
         {"message": "CO2 levels are approaching a critical threshold"}
     ]
     return jsonify(notifications)
+
+@app.route('/api/water-usage', methods=['GET'])
+def get_water_usage():
+    """Fetching latests water usage data from DynamoDB"""
+    try:
+        response = sensor_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('device_id').eq('WaterSensor'),
+            ScanIndexForward=False,
+            Limit=1
+        )
+        
+        if not response['Items']:
+            return jsonify({"message": "No water usage data found "}), 404
+        
+        latest_item = response['Items'][0]
+        payload = latest_item.get('payload', {}).get('M', {})
+        
+        flow_rate = float(payload.get('flow_rate', {}).get('N', 0))
+        timestamp = payload.get('timestamp', {}).get('S', "")
+        unit = payload.get('unit', {}).get('S', "L/min")
+        
+        return jsonify({
+            "flow_rate": flow_rate,
+            "unit": unit,
+            "timestamp": timestamp
+        })
+    except Exception as e:
+        logging.error(f"Error fetching water usage from DynamoDB: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
 #for prototype purposes the AI assitant uses a chagpt API for responses and queries,for the time being,for the final submission SAgeMaker handles AI processes
 @app.route('/api/ai-assistant',methods=['POST'])
 def ai_assistant():

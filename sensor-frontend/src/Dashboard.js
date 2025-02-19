@@ -22,6 +22,7 @@ const Dashboard = () => {
         },
      });
     const [waterFlow, setWaterFlow] = useState(null);
+    const [waterUnit, setWaterUnit] = useState("L/min");
     const [carbonFootprint, setCarbonFootprint] = useState(0);
     const [temperatureTrends, setTemperatureTrends] = useState([]);
     const [co2Trends, setCo2Trends] = useState([]);
@@ -46,6 +47,21 @@ const Dashboard = () => {
      * @returns {number|null} - Normalised temperature normalise or null if there is no data 
      * Reference within Requirements documentation
      */
+    useEffect(() => {
+        const fetchWaterFlowData = async() => {
+            try{
+                const response = await axios.get('http://localhost:5000/api/water-usage')
+                setWaterFlow(response.data.flow_rate);
+                setWaterUnit(response.data.unit);
+            } catch (error){
+                console.error('Error fetching water usage:', error)
+            }
+        };
+        fetchWaterFlowData();
+        const interval = setInterval(fetchWaterFlowData, 5000);
+        return () => clearInterval(interval);
+    }, [])
+    
     const normaliseTemperature = (temperature) => {
         if (temperature === null) return null;
         return temperature - CPU_TEMPERATURE_OFFSET;
@@ -268,12 +284,15 @@ const Dashboard = () => {
                     />
                 </Card>
                 <Card title="Water Usage">
+                    <p style={{fontSize: '12px', color: 'gray'}}>
+                        Monitors water consumption in real time
+                    </p>
                     <Progress
-                        percent={(data.waterUsage / 100) * 100}
+                        percent={(data.waterFlow / 100) * 100}
                         status="active"
                         showInfo={true}
                     />
-                    <p>{data.waterUsage !== null && data.waterUsage !== undefined ? `${data.waterUsage} litres` : 'Loading...'}</p>
+                    <p>{waterFlow !== null ? `${waterFlow.toFixed(2)} ${waterUnit}` : 'Loading...'}</p>
                 </Card>
                 <Card title="Carbon Footprint Impact">
                     <Progress 
