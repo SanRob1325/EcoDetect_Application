@@ -34,6 +34,7 @@ const Dashboard = () => {
     const [selectedRange, setSelectedRange] = useState('24h');
     const [loading, setLoading] = useState(false)
     const [isUpdatingThresholds, setIsUpdatingThresholds] = useState(false);
+    const [loadingAI, setLoadingAI] = useState(false);
     const [isChatbotVisible, setIsChatbotVisible] = useState(false) //stores user queries in the bot,still in development for SageMaker 
     const [chatHistory, setChatHistory] = useState([
         { sender: 'bot', message: 'Hello! How can I assist you today?' },]);
@@ -209,16 +210,34 @@ const Dashboard = () => {
         return `linear-gradient(to right, green ${percentage - 50}%, yellow ${percentage - 20}%, red ${percentage}%)`
     };
     //Not working yet but this track chat history of submitted queries
-    const handleSendMessage = () => {
+    const handleSendMessage = async () => {
         if (!userInput.trim()) return;
-        setChatHistory([...chatHistory, { sender: 'user', message: userInput }]);
+        setChatHistory(prev => [...prev, { sender: 'user', message: userInput }]);
+        setLoadingAI(true);
+        try{
+            const response = await axios.post('http://localhost:5000/api/ai-assistant', {
+                query: userInput
+            });
 
-        setChatHistory((prev) => [
-            ...prev,
-            { sender: 'user', message: userInput },
-            { sender: 'bot', message: `You asked: ${userInput}` },
-        ]);
+            const aiResponse = response.data.answer || "Sorry I couldn't process an answer for your request";
+
+            //Update chat history with AI response
+            setChatHistory(prev => [
+                ...prev,
+                { sender: 'user', message: userInput },
+                { sender: 'bot', message: aiResponse }
+            ]);
+        } catch (error){
+            console.error('Error commnicating with AI assitant:', error);
+
+            setChatHistory(prev => [
+                ...prev,
+                { sender: 'user', message: userInput },
+                { sender: 'bot', message: "Aplogies, unable to process an answer for you request, please try again"}
+            ]);
+        }
         setUserInput('');
+        setLoadingAI(false);
     };
     return ( //styling and structure for gauges,progress bars,and CO2 gradient percentage referenced above.This also is the sytling and customisation for the user preferences fo the range of temperature data
         <>
@@ -325,7 +344,7 @@ const Dashboard = () => {
                 footer={null}
                 width={400}
             >
-                <div style={{ height: '300px', overflowY: 'auto', marginBottom: '10px' }}>
+                <div style={{ height: '300px', overflowY: 'auto', marginBottom: '10px', padding: '5px', border: '1px solid #d9d9d9', borderRadius: '10px'}}>
                     {/* implementation still being worked on*/}
                     {chatHistory.map((chat, index) => (
                         <div
@@ -333,22 +352,34 @@ const Dashboard = () => {
                             style={{
                                 textAlign: chat.sender === 'user' ? 'right' : 'left',
                                 margin: '5px 0',
-                                padding: '5px 10px',
-                                borderRadius: '10px',
-                                backgroundColor: chat.sender === 'user' ? '#e6f7ff' : '#f5f5f5',
-                                display: 'inline-block',
+                                padding: '8px 12px',
+                                borderRadius: '15px',
+                                backgroundColor: chat.sender === 'user' ? '#d9f7be' : '#f0f0f0',
                                 maxWidth: '80%',
+                                alignSelf: chat.sender == 'user' ? 'flex-end': 'flex-start',
+                                fontSize: '14px',
                             }}
                         >
                             {chat.message}
                         </div>
                     ))} 
                 </div>
+                {loadingAI && <Spin style={{ display: 'block', margin: '10px auto'}} />}
+                <div style={{ display: 'flex', gap:'10px', marginBottom: '10px'}}>
+                    {["How can I reduce my carbon footprint?", "Tips for saving water", "Best eco-friendly matierals"].map((suggestion, idx) => (
+                        <Button key={idx} size="small" onClick={() => setUserInput(suggestion)}>
+                            {suggestion}
+                        </Button>
+                    ))}
+                </div>
                 <Input
                     placeholder='Enter you question...'
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
-                    onPressEnter={handleSendMessage}
+                    onPressEnter={(e) =>{
+                        e.preventDefault();
+                        handleSendMessage();
+                    }}
                     addonAfter={
                         <Button type="primary" icon={<SendOutlined />} onClick={handleSendMessage}>
                             Send

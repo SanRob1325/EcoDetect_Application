@@ -9,11 +9,12 @@ from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
 import logging
 import boto3
+import pandas as pd
 import paho.mqtt.client as mqtt
 from cloud_services.cognito.cognito_service import verify_token
 from functools import wraps
 import json
-
+from io import StringIO
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
@@ -23,7 +24,8 @@ CORS(app)
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
 sns_client = boto3.client("sns", region_name="eu-west-1")
 ses_client = boto3.client("ses",region_name="eu-west-1")
-
+s3_client = boto3.client('s3', region_name='eu-west-1')
+bedrock_client = boto3.client('bedrock-runtime', region_name='eu-west-1')
 SENSOR_TABLE = os.getenv("SENSOR_TABLE", "WaterFlowData")
 THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
 sensor_table = dynamodb.Table(SENSOR_TABLE)
@@ -36,7 +38,7 @@ sensor_data_collection = db.sensor_data
 thresholds_collection = db.thresholds
 alert_history_collection = db.alert_history
 water_data_collection = db.water_data
-
+query_logs_collection = db.query_logs
 CERTIFICATE_PATH = os.getenv("CERTIFICATE_PATH")
 PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH")
 ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
@@ -54,10 +56,6 @@ sensor = SenseHat()
 #prints thresholds for testing puposes
 print(thresholds)
 #SENSE-HAT is initailised for sensor readings
-
-
-#openai setup for prototype and testing purposes.AI assitant capabilities are tested here
-openai.api_key = os.getenv('OPENAI_API_KEY')
 
 #threshold defaults before user adjustment
 default_temperature_range = [20,25] #indoor temperature range in celsius
@@ -83,6 +81,41 @@ def calculate_carbon_footprint(data):
         footprint += data["pressure"] * 0.05
     return min(footprint, 100) # up to 100%
 
+def fetch_s3_csv(bucket_name, file_key):
+    "Fetch CSV file from S3 and return pandas dataframe"
+    try:
+        response =s3_client.get_object(Bucket=bucket_name, Key=file_key)
+        content = response['Body'].read().decode('utf-8')
+        return pd.read_csv(StringIO(content))
+    except Exception as e:
+        print(f"Error fetching S3 bucket{bucket_name}:{e}")
+        return pd.DataFrame()
+
+def get_long_term_sensor_trends():
+    df = fetch_s3_csv('sensehat-longterm-storage', 'carbon_footprint_training_sensehat.csv')
+    return df.tail (7)
+
+def get_long_term_water_trends():
+    df = fetch_s3_csv('waterflow-longterm-storage', 'carbon_footprint_training_waterflow.csv')
+    return df.tail(7)
+
+def get_training_data():
+    df = fetch_s3_csv('training-ecodetect', 'carbon_footprint_training_combined.csv')
+    return df.tail(7)
+
+def generate_prompt(user_query, sensor_data, water_data, long_term_sensor,long_term_water):
+    sensor_trend_summary = long_term_sensor.describe().to_dict()
+    water_trend_summary = long_term_water.describe().to_dict()
+    return(
+        f"User Query: {user_query}\n"
+        f"Real-Time Sensor Data: Temperature: {sensor_data.get('temperature', 'N/A')} Celsius"
+        f"Humidity: {sensor_data.get('humidity', 'N/A')}%, IMU: {sensor_data.get('imu', {})}\n"
+        f"Real-Time Water Flow: {water_data.get('payload', {}).get('flow_rate', {}).get('N', 'N/A')} L/min\n"
+        f"Long-Term Sensor Trends: {sensor_trend_summary}\n"
+        f"Long-Term Water Trends: {water_trend_summary}\n"
+        f"Provide personalised eco-friendly advice based on real time data and long term trends"
+    )
+    
 def normalize_sensor_data(data):
     normalized_data = {}
     
@@ -96,7 +129,7 @@ def normalize_sensor_data(data):
     humidity = data.get('humidity')
     if humidity:
         HUMIDITY_CALIBRATION = 1.05
-        normalized_data['humdity'] = round(humidity * HUMIDITY_CALIBRATION, 2)
+        normalized_data['humidity'] = round(humidity * HUMIDITY_CALIBRATION, 2)
         
     pressure = data.get('pressure')
     if pressure:
@@ -150,13 +183,6 @@ def recieve_sensor_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-#retrieves latest water flow and co2 levels in a json    
-@app.route('/api/latest-sensor-data', methods=['GET'])
-def get_latest_sensor_data():
-    return jsonify({
-        "yf401": latest_flow_data
-    })   
-    
 #monitor humidity to trigger alerts   
 @app.route('/api/humidity',methods=['POST'])
 def monitor_humidity():
@@ -229,27 +255,33 @@ def get_water_usage():
 def ai_assistant():
     """Generates suggestions for eco friendly matierals using OpenAI"""
     try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({"error": "Invalid input, 'query' field is required"}),400
+        user_query = request.json.get('query', '')
         
-        user_query = data['query'].strip()
-        if not user_query:
-            return jsonify({"error": "Query cannot be empty"}),400
+        sensor_data = get_sensor_data()
+        water_data = get_water_usage()
+        long_term_sensor = get_long_term_sensor_trends() or pd.DataFrame()
+        long_term_water = get_long_term_water_trends() or pd.DataFrame()
         
-        response = openai.Completion.create(
-            model="text-davinci-003",
-            prompt=f"Suggest eco-friendly matierals for: {user_query}",
-            temperature=0.7,
-            max_tokens=150
+        prompt = generate_prompt(user_query, sensor_data, water_data, long_term_sensor, long_term_water)
+        
+        response = bedrock_client.invoke_model(
+            modelId ='anthropic.claude-3.5-sonnet',
+            body=json.dumps({'prompt': prompt, 'maxTokens': 150, 'temperature': 0.7}
+        ),
+            contentType='application/json'
         )
+        answer = json.loads(response['body'].read())['completion']
         
-        answer = response.choices[0].text.strip()
+        query_logs_collection.insert_one({
+            "user_query": user_query,
+            "ai_response": answer,
+            "timestamp": datetime.now()
+        })
+        
         return jsonify({"answer": answer})
-    except openai.error.OpenAIError as e:
-        return jsonify({"error": "OpenAI error", "details": str(e)}),500
+    
     except Exception as e:
-        return({"error":"Unexpected server error", "details": str(e)}),500
+        return({"error":f"Failed to process request: {str(e)}"}),500
 
 #fetch sensor data API
 @app.route('/api/sensor-data', methods=['GET'])
@@ -364,7 +396,7 @@ def send_ses_email(message):
     
 def get_cpu_temperature():
     """Read from the systems CPU temperature to normalise SENSE-HAT readings Reference:https://www.kernel.org/doc/Documentation/thermal/sysfs-api.txt and https://emlogic.no/2024/09/step-by-step-thermal-management/"""
-    file_path = "sys/class/thermal/thermal_zone0/temp"
+    file_path = "/sys/class/thermal/thermal_zone0/temp"
 
     try:
         with open(file_path, "r") as f:
@@ -419,8 +451,6 @@ def get_thresholds():
     except Exception as e:
         logging.error(f"Error in /api/get_thresholds: {str(e)}")
         return jsonify({"error": str(e)}),500
-    
-
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port=5000)
