@@ -86,35 +86,31 @@ def fetch_s3_csv(bucket_name, file_key):
     try:
         response =s3_client.get_object(Bucket=bucket_name, Key=file_key)
         content = response['Body'].read().decode('utf-8')
-        return pd.read_csv(StringIO(content))
+        df = pd.read_csv(StringIO(content))
+        return df if not df.empty else pd.DataFrame()
     except Exception as e:
         print(f"Error fetching S3 bucket{bucket_name}:{e}")
         return pd.DataFrame()
 
 def get_long_term_sensor_trends():
-    df = fetch_s3_csv('sensehat-longterm-storage', 'carbon_footprint_training_sensehat.csv')
-    return df.tail (7)
+    try:
+        df = fetch_s3_csv('sensehat-longterm-storage', 'carbon_footprint_training_sensehat.csv')
+        return df.tail(7) if not df.empty else pd.DataFrame()
+    except Exception as e:
+        logging.error(f"Errror fetching sensor trends: {str(e)}")
+        return pd.DataFrame()
 
 def get_long_term_water_trends():
-    df = fetch_s3_csv('waterflow-longterm-storage', 'carbon_footprint_training_waterflow.csv')
-    return df.tail(7)
+    try:
+        df = fetch_s3_csv('waterflow-longterm-storage', 'carbon_footprint_training_waterflow.csv')
+        return df.tail(7) if not df.empty else pd.DataFrame()
+    except Exception as e:
+        logging.error(f"Errror fetching sensor trends: {str(e)}")
+        return pd.DataFrame()
 
 def get_training_data():
     df = fetch_s3_csv('training-ecodetect', 'carbon_footprint_training_combined.csv')
     return df.tail(7)
-
-def generate_prompt(user_query, sensor_data, water_data, long_term_sensor,long_term_water):
-    sensor_trend_summary = long_term_sensor.describe().to_dict()
-    water_trend_summary = long_term_water.describe().to_dict()
-    return(
-        f"User Query: {user_query}\n"
-        f"Real-Time Sensor Data: Temperature: {sensor_data.get('temperature', 'N/A')} Celsius"
-        f"Humidity: {sensor_data.get('humidity', 'N/A')}%, IMU: {sensor_data.get('imu', {})}\n"
-        f"Real-Time Water Flow: {water_data.get('payload', {}).get('flow_rate', {}).get('N', 'N/A')} L/min\n"
-        f"Long-Term Sensor Trends: {sensor_trend_summary}\n"
-        f"Long-Term Water Trends: {water_trend_summary}\n"
-        f"Provide personalised eco-friendly advice based on real time data and long term trends"
-    )
     
 def normalize_sensor_data(data):
     normalized_data = {}
@@ -251,37 +247,67 @@ def get_water_usage():
         return jsonify({"error": str(e)}), 500
     
 #for prototype purposes the AI assitant uses a chagpt API for responses and queries,for the time being,for the final submission SAgeMaker handles AI processes
-@app.route('/api/ai-assistant',methods=['POST'])
+@app.route('/api/ai-assistant', methods=['POST'])
 def ai_assistant():
     """Generates suggestions for eco friendly matierals using OpenAI"""
     try:
-        user_query = request.json.get('query', '')
+        data = request.json
+        logging.debug(f"Recieved user query: {data}")
+        user_query = data.get('query', '').strip()
         
-        sensor_data = get_sensor_data()
-        water_data = get_water_usage()
-        long_term_sensor = get_long_term_sensor_trends() or pd.DataFrame()
-        long_term_water = get_long_term_water_trends() or pd.DataFrame()
+        if not user_query:
+            return jsonify({"error": "Query cannot be empty"}), 400
         
-        prompt = generate_prompt(user_query, sensor_data, water_data, long_term_sensor, long_term_water)
+        sensor_data = sensor_data_collection.find_one(sort=[("timestamp", -1)]) or {}
+        water_data = water_data_collection.find_one(sort=[("timestamp", -1)]) or {}
+        long_term_sensor = get_long_term_sensor_trends() 
+        long_term_water = get_long_term_water_trends() 
         
-        response = bedrock_client.invoke_model(
-            modelId ='anthropic.claude-3.5-sonnet',
-            body=json.dumps({'prompt': prompt, 'maxTokens': 150, 'temperature': 0.7}
-        ),
-            contentType='application/json'
+        imu_data =sensor_data.get('imu', {})
+        imu_text = f"Acceleration: {imu_data.get('acceleration', 'N/A')}, Gyroscope: {imu_data.get('gyroscope', 'N/A')}, Magnetometer: {imu_data.get('magnetometer', 'N/A')}"
+        
+        sensor_trends = json.dumps(long_term_sensor.describe().to_dict(), indent=2) if not long_term_sensor.empty else 'N/A'
+        water_trends = json.dumps(long_term_water.describe().to_dict(), indent=2) if not long_term_water.empty else 'N/A'
+        
+        prompt = (
+            f"User Query: {user_query}\n"
+            f"Real-Time Sensor Data: Temperature: {sensor_data.get('temperature', 'N/A')} Celsius\n"
+            f"Humidity: {sensor_data.get('humidity', 'N/A')}%, IMU: {sensor_data.get('imu', {})}%\n"
+            f"IMU Data: {imu_text}\n"
+            f"Real-Time Water Flow: {water_data.get('payload', {}).get('flow_rate', {}).get('N', 'N/A')} L/min\n\n"
+            f"Long-Term Sensor Trends: {sensor_trends}\n"
+            f"Long-Term Water Trends: {water_trends}\n\n"
+            "Based on the real-time sensor data and long term trends,provide actionable,personalised advice to reduce the users carbon footprint and improve water efficiency"
+            "Avoid feneric tips; instead tailor recommendations to the specific evironmental conditions provided"
         )
-        answer = json.loads(response['body'].read())['completion']
+        logging.debug(f"Generated prompt: {prompt}")
         
-        query_logs_collection.insert_one({
-            "user_query": user_query,
-            "ai_response": answer,
-            "timestamp": datetime.now()
-        })
-        
+        payload = {
+            "inputText": prompt,
+            "textGenerationConfig": {
+                "maxTokenCount": 300,
+                "stopSequences": [],
+                "temperature": 0.7,
+                "topP": 1
+            }
+        }
+        response = bedrock_client.invoke_model(
+            modelId ="amazon.titan-text-lite-v1",
+            body=json.dumps(payload),
+            contentType='application/json',
+            accept='application/json'
+        )
+        response_body = json.loads(response['body'].read().decode('utf-8'))
+        logging.debug(f"Bedrock raw respons: {response_body}")
+        answer = response_body.get('results',[{}])[0].get('outputText','No response generated.')
+        logging.error(f"Validation error response: {response['body'].read().decode('utf-8')}")
+       
+        logging.info(f"AI Response: {answer}")
         return jsonify({"answer": answer})
     
     except Exception as e:
-        return({"error":f"Failed to process request: {str(e)}"}),500
+        logging.error("Error invoking Bedrock model", exc_info=True)
+        return jsonify({"error":f"Failed to process request: {str(e)}"}),500
 
 #fetch sensor data API
 @app.route('/api/sensor-data', methods=['GET'])
