@@ -1,20 +1,18 @@
 from flask import Flask,jsonify,request
 from flask_cors import CORS
 import os
-from datetime import datetime
 from dotenv import load_dotenv
 from sense_hat import SenseHat
-import openai
 from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
 import logging
 import boto3
 import pandas as pd
-import paho.mqtt.client as mqtt
 from cloud_services.cognito.cognito_service import verify_token
-from functools import wraps
 import json
 from io import StringIO
+from sklearn.ensemble import IsolationForest
+from statsmodels.tsa.arima.model import ARIMA
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
@@ -44,7 +42,7 @@ PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH")
 ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
 
 #AWS SNS setup for sending alerts
-sns_client = boto3.client('sns',region_name='eu-west')
+sns_client = boto3.client('sns',region_name='eu-west-1')
 SNS_TOPIC_ARN= os.getenv("SNS_TOPIC_ARN")
 SES_EMAIL_RECIPIENT = os.getenv("SES_EMAIL_RECIPIENT")
 SES_EMAIL_SENDER = os.getenv("SES_EMAIL_SENDER")
@@ -191,7 +189,7 @@ def monitor_humidity():
         
         if humidity < HUMIDITY_THRESHOLD_LOW or humidity > HUMIDITY_THRESHOLD_HIGH:
             trigger_humidity_alert(humidity)
-        return jsonify({"status": "Humidity checl completed","humidity": humidity})
+        return jsonify({"status": "Humidity check completed","humidity": humidity})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -245,7 +243,29 @@ def get_water_usage():
     except Exception as e:
         logging.error(f"Error fetching water usage from DynamoDB: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+def fetch_recent_sensor_data(device_id):
+    """Fetch the latest data from sensor tables in dynamodDB"""
+    try:
+        response =sensor_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('device_id').eq(device_id),
+            Limit=10,
+            ScanIndexForward=False
+        )
+        
+        if not response['Items']:
+            logging.warning(f"No sensor readings found for device_id: {device_id}")
+            return []
+        
+        for item in response['Items']:
+            if 'timestamp' in item:
+                item['timestamp'] = pd.to_datetime(item['timestamp'])        
+        return response['Items']
     
+    except Exception as e:
+        logging.error(f"Error fetching DynamoDB data: {e}", exc_info=True)
+        return []
+
 #for prototype purposes the AI assitant uses a chagpt API for responses and queries,for the time being,for the final submission SAgeMaker handles AI processes
 @app.route('/api/ai-assistant', methods=['POST'])
 def ai_assistant():
@@ -278,7 +298,11 @@ def ai_assistant():
             f"Long-Term Sensor Trends: {sensor_trends}\n"
             f"Long-Term Water Trends: {water_trends}\n\n"
             "Based on the real-time sensor data and long term trends,provide actionable,personalised advice to reduce the users carbon footprint and improve water efficiency"
-            "Avoid feneric tips; instead tailor recommendations to the specific evironmental conditions provided"
+            "Avoid generic tips; instead tailor recommendations to the specific environmental conditions provided"
+            "If the water flow is 0 L/min, suggest checkin leafs or usage patterns"
+            "If the temperature is above 25 degrees Celsius,suggest cooling solutions"
+            "If the user asks for temperature,humidity,imu data from the sensor please provide the information"
+            "Say Hello to the user if they enter Hello and intoduce yourself as the EcoBot which is a carbon footprint advisor"
         )
         logging.debug(f"Generated prompt: {prompt}")
         
@@ -298,7 +322,7 @@ def ai_assistant():
             accept='application/json'
         )
         response_body = json.loads(response['body'].read().decode('utf-8'))
-        logging.debug(f"Bedrock raw respons: {response_body}")
+        logging.debug(f"Bedrock raw response: {response_body}")
         answer = response_body.get('results',[{}])[0].get('outputText','No response generated.')
         logging.error(f"Validation error response: {response['body'].read().decode('utf-8')}")
        
@@ -394,32 +418,21 @@ def get_calculate_footprint():
     
 def send_sns_alert(message):
     sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=message, Subject="Threshold Alert")
-    """Fetch latest water flow data"""
-    try:
-        latest_data = water_data_collection.find_one(sort=[("timestamp", -1)])
-        if latest_data:
-            return jsonify({
-                "flow_rate": latest_data["flow_rate"],
-                "timestamp": latest_data["timestamp"].isoformat()
-            })
-        logging.info(f"SNS Alert Sent: {message}")
-    except Exception as e:
-        logging.error(f"Error sending SNS alert:{str(e)}")
         
-def send_ses_email(message):
+def send_ses_email(subject, message):
     try:
         ses_client.email(
             Source=SES_EMAIL_SENDER,
-            Destination={"ToAddress": [SES_EMAIL_RECIPIENT]},
+            Destination={"ToAddresses": [SES_EMAIL_RECIPIENT]},
             Message={
-                "Subject": {"Data": "Threshold Alert"},
+                "Subject": {"Data": subject},
                 "Body": {"Text": {"Data": message}}
             }
         )
         logging.info(f"SES Email Sent: {message}")
     except Exception as e:
         logging.error(f"Error sending SES email: {str(e)}")
-    
+
 def get_cpu_temperature():
     """Read from the systems CPU temperature to normalise SENSE-HAT readings Reference:https://www.kernel.org/doc/Documentation/thermal/sysfs-api.txt and https://emlogic.no/2024/09/step-by-step-thermal-management/"""
     file_path = "/sys/class/thermal/thermal_zone0/temp"
@@ -433,6 +446,7 @@ def get_cpu_temperature():
     except Exception as e:
         logging.error(f"Error reading CPU temperature: {str(e)}")
         return None
+    
 #Historical trends and the ranges that users can apply if the system has operated within the selcted timeframes
 @app.route('/api/temperature-trends', methods=['GET'])
 def get_temperature_trends():
@@ -477,6 +491,58 @@ def get_thresholds():
     except Exception as e:
         logging.error(f"Error in /api/get_thresholds: {str(e)}")
         return jsonify({"error": str(e)}),500
+    
+@app.route('/api/predictive-analysis', methods=['GET'])
+def predictive_analysis():
+    """Predicts future trends using ARIMA and detect anomiies with Isolation Forest"""
+    try:
+        data_type = request.args.get('data_type', 'temperature')
+        prediction_days = int(request.args.get('days', 7))
+        
+        historical_df = get_long_term_sensor_trends()
+        recent_data = fetch_recent_sensor_data('Main_Pi')
+        recent_df = pd.DataFrame(recent_data) 
+
+        if 'timestamp' not in historical_df.columns or data_type not in historical_df.columns:
+            return jsonify({"error": "Historical data missing required columns"}), 400
+        
+        if 'timestamp' in recent_df.columns:
+            recent_df['timestamp'] = pd.to_datetime(recent_df['timestamo'])
+            
+        combined_df = pd.concat([historical_df, recent_df], ignore_index=True)
+        
+        if combined_df.empty or data_type not in combined_df.columns:
+            return jsonify({"error": "Insufficient data for analysis"}), 400
+        
+        combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+        combined_df.sort_values('timestamp', inplace=True)
+        
+        data_payload = combined_df[['timestamp', data_type]].to_dict(orient='records')
+        
+        prompt = {
+            "inputText": ( f"Predict the next {prediction_days} days of {data_type} trends based on the following historical data : {data_payload}. "
+                           f"Also detect anomalies and provide actionable insights and recommendations."),
+            "textGenerationConfig": {"maxTokenCount": 300,  "temperature": 0.7, "topP": 1}
+        }
+        
+        response = bedrock_client.invoke_model(
+            modelId="amazon.titan-text-lite-v1",
+            body=json.dumps(prompt),
+            contentType='application/json',
+            accept='application/json'
+        )
+        response_body = json.loads(response['body'].read().decode('utf-8'))        
+        predictions = response_body.get('results', [{}])[0].get('predictions', [])  
+        anomalies = response_body.get('results', [{}])[0].get('anomalies', [])
+        
+        return jsonify({
+            "predictions": predictions,
+            "anomalies": anomalies
+        })
+        
+    except Exception as e:
+        logging.error(f"Error in predictive anaysis: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port=5000)

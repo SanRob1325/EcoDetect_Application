@@ -363,7 +363,7 @@ const Dashboard = () => {
                                 borderRadius: '15px',
                                 backgroundColor: chat.sender === 'user' ? '#d9f7be' : '#f0f0f0',
                                 maxWidth: '80%',
-                                alignSelf: chat.sender == 'user' ? 'flex-end': 'flex-start',
+                                alignSelf: chat.sender === 'user' ? 'flex-end': 'flex-start',
                                 fontSize: '14px',
                             }}
                         >

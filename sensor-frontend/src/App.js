@@ -24,7 +24,7 @@ const App = () => {
           </div>
           <Menu theme="dark" mode="inline" defaultSelectedKeys={['1']} style={{ height: '100%', borderRight: 0 }}>
             <Menu.Item key="1"><Link to="/">Dashboard</Link></Menu.Item>
-            <Menu.Item key="2"><Link to="/ai-assistant">AI Assistant</Link></Menu.Item>
+            <Menu.Item key="2"><Link to="/ai-assistant">AI Assistant Predictive Analysis</Link></Menu.Item>
             <Menu.Item key="3"><Link to="/notice-board">Notice Board</Link></Menu.Item>
             <Menu.Item key="4"><Link to="/alerts">Alerts</Link></Menu.Item>
             <Menu.Item key="5"><Link to="/settings">Settings</Link></Menu.Item>
