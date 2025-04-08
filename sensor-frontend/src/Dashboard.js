@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react'; 
 import axios from 'axios'; // Avios is used for HTTP requests. Reference: https://axios-http.com/docs/intro
 import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://antoniolago.github.io/react-gauge-component/ and https://www.npmjs.com/package/react-gauge-chart
-import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
+import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar, Checkbox } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
 import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
 import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
+import {notification, Badge, List, Typography} from 'antd';
+import Alerts from './Alerts';
+import CarbonFootprintCard from './CarbonFootprint';
+import ReportCard from './ReportCard';
+const {Text} = Typography
 
 const { Option } = Select;
 //Stores sensor data such as temperature,humidity,water usage and CO2 leves
@@ -21,9 +26,9 @@ const Dashboard = () => {
             magnetometer: [0,0,0],
         },
      });
+    const [alerts, setAlerts] = useState([])
     const [waterFlow, setWaterFlow] = useState(null);
     const [waterUnit, setWaterUnit] = useState("L/min");
-    const [carbonFootprint, setCarbonFootprint] = useState(0);
     const [temperatureTrends, setTemperatureTrends] = useState([]);
     const [co2Trends, setCo2Trends] = useState([]);
     const [thresholds, setThresholds] = useState({
@@ -41,13 +46,65 @@ const Dashboard = () => {
     const [userInput, setUserInput] = useState('')
 
     const CPU_TEMPERATURE_OFFSET = 5; //Normalise CPU temperature to reduce noise in the temperature value
-
+    
+    const [notificationPrefs, setNotificationPrefs] = useState({
+        sms_enabled: true,
+        email_enabled: true,
+        critical_only: false
+    })
     /**
      * Adjusts temperature readings to exclude CPU output
      * @param {number} temperature 
      * @returns {number|null} - Normalised temperature normalise or null if there is no data 
      * Reference within Requirements documentation
      */
+    useEffect(() => {
+        const fetchAlerts = async() => {
+            try{
+                const response = await axios.get('http://localhost:5000/api/alerts')
+                setAlerts(response.data)
+
+                // Show notification for the most recent alert if its new
+                if (response.data.length > 0 && alerts.length === 0){
+                    const latestAlert = response.data[0];
+                    notification.warning({
+                        message: 'Threshold Alert',
+                        description: `${latestAlert.exceeded_thresholds.join(', ')} thresholds exceeded.`,
+                        duration: 5
+                    })
+                }
+            }catch (error){
+                console.error('Error fetching alerts:', error)
+            }
+        }
+
+        fetchAlerts();
+        const interval = setInterval(fetchAlerts, 30000); // every 30 seconds
+        return () => clearInterval(interval)
+
+    }, [])
+
+    useEffect(() => {
+        const fetchNotificationPrefs = async () => {
+            try{
+                const response = await axios.get('http://localhost:5000/api/notification-preferences')
+                setNotificationPrefs(response.data);
+            } catch (error){
+                console.error('Error fetching notification preferences:', error)
+            }
+        }
+
+        fetchNotificationPrefs();
+    }, [])
+
+    const updateNotificationPrefs = async () => {
+        try{
+            await axios.post('http://localhost:5000/api/notification-preferences', notificationPrefs);
+            alert('Notification preferences updated successfully')
+        }catch(error){
+            console.error('Error updating notification preferences:', error)
+        }
+    }
     useEffect(() => {
         const fetchWaterFlowData = async() => {
             try{
@@ -121,20 +178,6 @@ const Dashboard = () => {
     }, [selectedRange]);
 
     useEffect(() => {
-        const fetchCarbonFootprint = async () => {
-            try{
-                const response = await axios.get('http://localhost:5000/api/carbon-footprint');
-                setCarbonFootprint(response.data.carbon_footprint);
-            } catch (error){
-                console.error('Error fetching carbon footprint', error);
-            }
-        };
-        fetchCarbonFootprint();
-        const interval = setInterval(fetchCarbonFootprint, 5000)
-        return () => clearInterval(interval);
-    },[])
-
-    useEffect(() => {
         const fetchTrends = async () => {
             try {
                 const response = await axios.get(`http://localhost:5000/api/temperature-trends?range=${selectedRange}`);
@@ -174,27 +217,6 @@ const Dashboard = () => {
             setIsUpdatingThresholds(false)
         }
     };
-
-    const calculateCarbonFootprint = () => {
-        if (data.temperature !== null && waterFlow !== null) {
-            let footprint = (data.temperature * 0.2) + (waterFlow * 0.5);
-
-            if(data.altitude !== null){
-                footprint += data.altitude * 0.1;
-            }
-
-            if(data.pressure !== null){
-                footprint += data.pressure * 0.05;
-            }
-            return Math.min(footprint, 100);
-        }
-
-        return 0;
-    }
-
-    useEffect(() => {
-        setCarbonFootprint(calculateCarbonFootprint());
-    }, [data, waterFlow])
 
 //caluclation of threshold ranges for temperature and humidity
     const tempValue = data.temperature !== null
@@ -316,20 +338,19 @@ const Dashboard = () => {
                         Monitors water consumption in real time
                     </p>
                     <Progress
-                        percent={(data.waterFlow / 100) * 100}
+                        percent={waterFlow !== null ? Math.min((waterFlow / 10) * 100, 100) :0}
                         status="active"
                         showInfo={true}
                     />
                     <p>{waterFlow !== null ? `${waterFlow.toFixed(2)} ${waterUnit}` : 'Loading...'}</p>
+                    {thresholds.flow_rate_threshold && (
+                        <p style={{ color: waterFlow > thresholds.flow_rate_threshold ? 'red': 'green'}}>
+                            Threshold: {thresholds.flow_rate_threshold} {waterUnit}
+                        </p>
+                    )}
                 </Card>
-                <Card title="Carbon Footprint Impact">
-                    <Progress 
-                        percent={carbonFootprint}
-                        status="active"
-                        showInfo={true}
-                    />
-                    <p>{carbonFootprint.toFixed(2)}% environmental impact</p>
-                </Card>
+                <CarbonFootprintCard sensorData={data} waterFlow={waterFlow}/>
+                <ReportCard />
             </div>
             {/*Chatbot opens */}
             <Button
@@ -395,6 +416,8 @@ const Dashboard = () => {
                     }
                 />
             </Modal>
+            <Alerts />
+           
             <Card title="CO2 Trends" style={{ marginTop: '16px' }}>
                 <div style={{ display: "flex", justifyContent: 'space-between', alignItems: 'center' }}>
                     <p>Select Range</p>
@@ -446,10 +469,53 @@ const Dashboard = () => {
                             onChange={(value) => setThresholds({ ...thresholds, humidity_range: value })}
                         />
                     </div>
+                    <div>
+                        <p>Water Flow Threshold (L/min)</p>
+                        <Slider
+                            min={0}
+                            max={20}
+                            value={thresholds.flow_rate_threshold}
+                            onChange={(value) => setThresholds({ ... thresholds, flow_rate_threshold: value})}
+                            />
+                    </div>
                 </div>
                 <Button type="primary" onClick={updateThresholds} style={{ marginTop: '16px' }}>
                     Update Thresholds
                 </Button>
+            </Card>
+            <Card title="Notification Preferences" style={{marginTop: '16px'}}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                    <div>
+                        <Checkbox
+                            checked={notificationPrefs.sms_enabled}
+                            onChange={(e) => setNotificationPrefs({... notificationPrefs, sms_enabled: e.target.checked})}
+                        >
+                            Receive SMS Alerts
+                        </Checkbox>
+                    </div>
+                    <div>
+                        <Checkbox
+                            checked={notificationPrefs.email_enabled}
+                            onChange={(e) => setNotificationPrefs({...notificationPrefs, email_enabled: e.target.checked})}
+                        >
+                            Receive Email Alerts
+
+                        </Checkbox>
+                    </div>
+                    <div>
+                        <Checkbox
+                            checked={notificationPrefs.critical_only}
+                            onChange={(e) => setNotificationPrefs({...notificationPrefs, critical_only: e.target.checked})}
+                        >
+                            Critical Alerts Only
+                        </Checkbox>
+                    </div>
+                </div>
+                <Button type="primary" onClick={updateNotificationPrefs} style={{ marginTop: '16px'}}>
+                    Update Notification Preferences
+                </Button>
+                
+                
             </Card>  
             <Card title="Temperature Trends" style={{ marginTop: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',marginBottom: '10px' }}>

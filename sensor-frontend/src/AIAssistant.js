@@ -40,12 +40,25 @@ const AIAssistant = () => {
                 params: { data_type: dataType, days},
                 headers: { 'Content-Type': 'application/json'} 
             });
-            setPredictions(response.data.predictions || []);
-            setAnomalies(response.data.anomalies || []);
-            setAlertMessage(response.data.anomalies.length ? "Anomalies detected!" : "Nosignificant anomalies detected.")
+            console.log("Predictive data:", response.data);
+            if (response.data && response.data.error) {
+                setAlertMessage(`Error: ${response.data.error}`)
+                setPredictions([])
+                setAnomalies([])
+            } else {
+                setPredictions(response.data.predictions || []);
+                setAnomalies(response.data.anomalies || []);
+                setAlertMessage(response.data.anomalies && response.data.anomalies.length ?
+                    `${response.data.anomalies.length} anomalies detected!` :
+                    "No significant anomalies detected."
+                );
+            }
+
         }catch (error) {
             console.error("Error fetching predictive data", error)
-            setAlertMessage("Failed to fetch predictive data");
+            setAlertMessage( error.response?.data?.error ||"Failed to fetch predictive data");
+            setPredictions([])
+            setAnomalies([])
         } finally {
             setLoading(false);
         }
@@ -62,6 +75,7 @@ const AIAssistant = () => {
         setLoading(true); //starts loading 
         setAiResponse(''); // Clear previous response
         try{
+            await fetchPredictiveData();
             const response = await axios.post('http://localhost:5000/api/ai-assistant',{
                 query: `Provide redictive analysis: ${userQuery}`,
             })
@@ -72,42 +86,67 @@ const AIAssistant = () => {
         }finally{
             setLoading(false); //ends loading
         }
-    }
+    };
 
     useEffect(() => {
         fetchPredictiveData();
     }, [dataType, days]);
 
     const chartData = {
-        label: predictions.map(item => item.date),
+        labels: predictions.map(p => moment(p.date).format( 'MMM D')),
         datasets: [
             {
                 label: `Predicted ${dataType}`,
-                data: predictions.map(item => item.prediction),
+                data: predictions.map(p => p.predicted_value),
                 borderColor: 'blue',
                 borderWidth: 2,
                 fill: false,
-                tension: 0.3
-            },
-            {
-                label: 'Anomalies',
-                data: anomalies.map(item => item[dataType] ?? null),
-                borderColor: 'red',
-                backgroundColor: 'red',
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                showLine: false,
-            },
-        ],
+                tension: 0.3,
+            }
+        ]
     };
+
+    const charOptions = {
+        responsive: true,
+        plugins: {
+            legend: { position: 'top'},
+            tooltip: { enabled: true},
+        },
+        scales: {
+            x: {
+                ticks: { autoSkip: false},
+            },
+            y: {
+                beginAtZero: true,
+            },
+        },
+        annotation: {
+            annotations: anomalies.map((anomaly) => ({
+                type: 'line',
+                mode: 'vertical',
+                scaleID: 'x',
+                value: moment(anomaly.date).format('MMM D'),
+                borderColor: 'red',
+                borderWidth: 2,
+                label: {
+                    content: `Anomaly: ${anomaly.value}`,
+                    enabled: true,
+                    position: 'top',
+                },
+            })),
+            
+        },
+    };
+ 
         //Styling for AI processing the user query
         return (
             <div className="predictive-analysis-page">
                 <Card title="Predictive Analysis & Anomaly Detection" className='analysis-card'>
                     <div className="controls">
-                        <Select value={dataType} onChange={setDataType} style={{ width: 200, marginRight: 1}}>
+                        <Select value={dataType} onChange={setDataType} style={{ width: 200, marginRight: 10}}>
                             <Select.Option value="temperature">Temperature</Select.Option>
                             <Select.Option value="humidity">Humidity</Select.Option>
+                            <Select.Option value="pressure">Pressure</Select.Option>
                             <Select.Option value="flow_rate">Water Usage</Select.Option>
                         </Select>
                         <Select value={days} onChange={setDays} style={{ width: 120}}>
@@ -116,43 +155,56 @@ const AIAssistant = () => {
                             <Select.Option value={14}>14 days</Select.Option>
                             <Select.Option value={30}>30 days</Select.Option>
                         </Select>
-                        <RangePicker value={dateRange} onChange={(dates) => setDateRange(dates)} style={{ marginLeft: 10}}/>
-                        <Button type="primary" onClick={fetchPredictiveData} style={{ marginLefy: 10}}>
+                        <RangePicker value={dateRange} onChange={setDateRange} style={{ marginLeft: 10}}/>
+                        <Button type="primary" onClick={fetchPredictiveData}>
                             Refresh Data
                         </Button>
                     </div>
                     {alertMessage && (
-                        <Alert message={alertMessage} type={alertMessage.includes("X") ? "error": "info"} showIcon style={{ marginTop: 20}} />
+                        <Alert message={alertMessage} 
+                        type={alertMessage.includes("anomalies detected!") ? "warning":
+                              alertMessage.includes("Error:") ? "error" : "success"} 
+                        showIcon 
+                        style={{ marginTop: 20}} 
+                        />
                     )}
 
                     {loading ? (
-                        <Spin indicator={<LoadingOutlined style={{ fontSize: 24}} spin />} style={{ marginTop: 20}} />
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20}}>
+                        <Spin indicator={<LoadingOutlined style={{ fontSize: 24}} spin />} />
+                        </div>
                     ) : predictions.length >0 ? (
-                        <Line data={chartData} options={{responsive: true, plugins: { legend: { position: 'top'}}}} />
+                        <Line data={chartData} options={charOptions} />
                     ) : (
                         <Alert message="No prediction data available" type="warning" showIcon style={{marginTop: 20}} />
-
                     )}
 
+                    {anomalies.length > 0 && (
+                        <Card title="Anomalies Detected" style={{ marginTop: 20}}>
+                            <ul>
+                                {anomalies.map((anomaly, i) => (
+                                    <li key={i}>
+                                        {moment(anomaly.date).format('MMMM Do YYYY, h:mm a')} - Value: {anomaly.value}
+                                    </li>))}
+                            </ul>
+                        </Card>
+                    )}
                 </Card>
 
                 <Card title="AI Assistant" className="ai-card">
                     <Input.TextArea
                         value={userQuery}
                         onChange={(e) => setUserQuery(e.target.value)}
-                        placeholder="Ask the AI about your environmental trends..."
+                        placeholder='Ask the AI about your environmental trends...'
                         rows={3}
                     />
-                    <Button type="primary" onClick={handleQuerySubmit} style={{ marginTop: 10}} disabled={loading}>
-                        Submit
-                    </Button>
-
+                    <Button type="primary" onClick={handleQuerySubmit} style={{ marginTop: 10}} disabled={loading}>Submit</Button>
                     {aiResponse && (
                         <div style={{ marginTop: 20}}>
                             <Title level={4}>AI Response:</Title>
                             <Paragraph>{aiResponse}</Paragraph>
                         </div>
-                    )}
+                    )}                   
                 </Card>
             </div>
         );

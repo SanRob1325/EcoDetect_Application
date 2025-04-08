@@ -8,7 +8,8 @@ import NoticeBoard from './NoticeBoard';
 import SettingsPage from './SettingsPage';
 import Alerts from './Alerts';
 import logo from './Icon-Only-Black.png'
-
+import ReportGenerator from './ReportGenerator';
+import RoomMonitor from './RoomMonitor';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -28,6 +29,8 @@ const App = () => {
             <Menu.Item key="3"><Link to="/notice-board">Notice Board</Link></Menu.Item>
             <Menu.Item key="4"><Link to="/alerts">Alerts</Link></Menu.Item>
             <Menu.Item key="5"><Link to="/settings">Settings</Link></Menu.Item>
+            <Menu.Item key="6"><Link to="/reports">Reports</Link></Menu.Item>
+            <Menu.Item key="7"><Link to="/rooms">Room Monitoring</Link></Menu.Item>
           </Menu>
         </Sider>
         <Layout>
@@ -42,6 +45,8 @@ const App = () => {
               <Route path="/notice-board" element={<NoticeBoard />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/reports" element={<ReportGenerator />} />
+              <Route path="/rooms" element={<RoomMonitor />} />
             </Routes>
           </Content>
         </Layout>
