@@ -14,8 +14,6 @@ from boto3.dynamodb.conditions import Key
 import pandas as pd
 import numpy as np
 import random
-import shutil
-from pathlib import Path
 import json
 import math
 from io import StringIO
@@ -34,70 +32,11 @@ ses_client = boto3.client("ses",region_name="eu-west-1")
 s3_client = boto3.client('s3', region_name='eu-west-1')
 bedrock_client = boto3.client('bedrock-runtime', region_name='eu-west-1')
 
-DATA_DIR = Path("./data")
-THRESHOLDS_FILE = DATA_DIR / "thresholds.json"
-SENSOR_DATA_DIR = DATA_DIR / "sensor_data"
-ALERTS_DIR = DATA_DIR / "alerts"
-
-# Create directories if they dont exist
-DATA_DIR.mkdir(exist_ok=True)
-SENSOR_DATA_DIR.mkdir(exist_ok=True)
-ALERTS_DIR.mkdir(exist_ok=True)
 THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
 SENSOR_TABLE = dynamodb.Table(os.getenv("SENSEHAT_TABLE", "SenseHatData"))
 WATER_TABLE = dynamodb.Table(os.getenv("WATER_TABLE", "WaterFlowData"))
 threshold_table = dynamodb.Table(THRESHOLD_TABLE)
 
-# Data base setup for mongodb for storing sensor data thresholds and aler history
-using_mongodb = False
-
-try:
-    # Try connecting with MongoDB for backward compatibility
-    logging.info("Attempting to connect with MongoDB")
-    client = MongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=2000)
-    db = client.ecodetect
-    sensor_data_collection = db.sensor_data
-    thresholds_collection = db.thresholds
-    alert_history_collection = db.alert_history
-    water_data_collection = db.water_data
-    query_logs_collection = db.query_logs
-
-    # Test connection
-    client.server_info()
-    logging.info("Connected to MongoDB successfully")
-
-    # Get thresholds from MongoDB
-    thresholds = thresholds_collection.find_one()
-    using_mongodb = True
-except Exception as e:
-    logging.warning(f"MongoDB connection failed: {e}")
-    logging.info("Using filebased storage instead")
-    using_mongodb = False
-
-    thresholds = load_json(THRESHOLDS_FILE, {
-        "temperature range": [20, 25,]
-        "humidity_range": [30, 60]
-    })
-
-    # Save defaule thresholds if they dont exist
-    if not os.path.exists(THRESHOLDS_FILE):
-        save_json(THRESHOLDS_FILE, thresholds)
-
-def save_json(file_path, data):
-    """Save data to aJSON file"""
-    with open(file_path, 'w') as f:
-        json.dump(data, f, default=str)
-    return True
-def load_json(file_path, default=None):
-    """Load data from a json file"""
-    try:
-        if not file_path.exists():
-            return default
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        logging.error(f"error loading {file_path}: {e}")
-        return default
 #Database setup in MongoDB for storing sensor data,thresholds and alert history
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client.ecodetect
@@ -134,13 +73,6 @@ latest_co2_data = None
 latest_flow_data = None
 #function to get thresholds,falling back to deafts if non are set
 
-class FileStorageAlertService:
-    def __init__(self, sns_client, ses_client, dynamodb, mongo_db=None):
-        self.sns_client = sns_client
-        self.ses_client = ses_client
-        self.dynamodb = dynamodb
-        self.mongo_db = mongo_db 
-
 # create alert service
 
 alert_service= AlertService(
@@ -149,8 +81,6 @@ alert_service= AlertService(
     dynamodb=dynamodb,
     mongo_db=db
 )
-
-    
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple check for checking enpoint API's are working"""
@@ -216,31 +146,73 @@ def get_training_data():
 def normalize_sensor_data(data):
     normalized_data = {}
     
+    # Handle temperature data, ensuring it's a float value
     temperature = data.get('temperature')
-    cpu_temperature = get_cpu_temperature()
-    if temperature and cpu_temperature:
-        normalized_data['temperature'] = round(temperature  - ((cpu_temperature - temperature) / 5.466), 2)
-    else:
-        normalized_data['temperature'] = temperature
-        
+    if temperature is not None:
+        try:
+            temperature = float(temperature)
+            cpu_temperature = get_cpu_temperature()
+            if cpu_temperature is not None:
+                normalized_data['temperature'] = round(temperature  - ((cpu_temperature - temperature) / 5.466), 2)
+            else:
+                normalized_data['temperature'] = round(temperature,2)
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid temperature value: {temperature}")
+            normalized_data['temperature'] = temperature
+    
+    # Handle humidity data, ensuring it's a float value
     humidity = data.get('humidity')
-    if humidity:
-        HUMIDITY_CALIBRATION = 1.05
-        normalized_data['humidity'] = round(humidity * HUMIDITY_CALIBRATION, 2)
-        
+    if humidity is not None:
+        try:
+            humidity = float(humidity)
+            HUMIDITY_CALIBRATION = 1.05
+            normalized_data['humidity'] = round(humidity * HUMIDITY_CALIBRATION, 2)
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid humidity values: {humidity}")
+            normalized_data['humidity'] = humidity
+    
+    # Handle pressure data, ensuring it's a float value
     pressure = data.get('pressure')
-    if pressure:
-        normalized_data['pressure'] = round(pressure, 2)
-        normalized_data['altitude'] = round(44330 * (1 - (pressure / 1013.25) ** 0.1903), 2)
-        
+    if pressure is not None:
+        try:
+            pressure = float(pressure)
+            normalized_data['pressure'] = round(pressure, 2)
+            normalized_data['altitude'] = round(44330 * (1 - (pressure / 1013.25) ** 0.1903), 2)
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid pressure value: {pressure}")
+            normalized_data['pressure'] = pressure
+            normalized_data['altitude'] = 0
+    # Handle IMU data processing        
     imu = data.get('imu', {})
     normalized_data['imu'] = {
-        "acceleration": [round(val, 2) for val in imu.get('acceleration',[])],
-        "gyroscope": [round(val, 2) for val in imu.get('gyroscope', [])],
-        "magnetometer": [round(val, 2) for val in imu.get('magnetometer', [])]
+        "acceleration": safely_convert_list_to_float(imu.get('acceleration', [])),
+        "gyroscope": safely_convert_list_to_float(imu.get('gyroscope', [])),
+        "magnetometer": safely_convert_list_to_float(imu.get('magnetometer', []))
     }
     
     return normalized_data
+
+def safely_convert_list_to_float(data_list):
+    result = []
+    if isinstance(data_list, list):
+        for val in data_list[:3]:# Will only take 3 values (x,y,z)
+            try:
+                result.append(round(float(val), 2))
+            except (ValueError, TypeError):
+                result.append(0.0)
+        while len(result) < 3:
+            result.append(0.0)
+    elif isinstance(data_list, dict):
+        # Handle IMU data in the case it's in {x: val, y: val, z: val} format
+        for key in ['x','y','z']:
+                try:
+                    result.append(round(float(data_list.get(key, 0)), 2))
+                except (ValueError, TypeError):
+                    result.append(0.0)
+    else:
+        # Default to zeros if the dat ais invalid
+        result = [0.0, 0.0, 0.0]
+    return result
 
 def get_default_thresholds():
     thresholds = thresholds_collection.find_one({}, {"_id":0})
@@ -266,8 +238,12 @@ def receive_sensor_data():
         if missing_keys:
             return jsonify({"error": f"Missing required keys: {missing_keys}"}), 400
         
+        # Log of incoming data
+        logging.debug(f"Recieved sensor data: {raw_data}")
+
+        # Normalise the data
         normalized_data = normalize_sensor_data(raw_data)
-        #add time stamp
+        #add time stamp and metadata
         normalized_data['timestamp'] = datetime.now()
         normalized_data['location'] = raw_data.get('location', 'Unknown Room')
         normalized_data['room_id'] = raw_data.get('room_id', 'unknown')
@@ -276,16 +252,19 @@ def receive_sensor_data():
         logging.debug(f"Normalised Data: {normalized_data}")
         
         try:
-            if using_mongodb:
-                # this also includes room_id in MongoDB query to allow filtering
-                result = sensor_data_collection.insert_one(normalized_data)
+            # this also includes room_id in MongoDB query to allow filtering
+            result = sensor_data_collection.insert_one(normalized_data)
             if not result.inserted_id:
                 raise Exception("Failed to insert data into MongoDB")
 
-            exceeded_thresholds = alert_service.check_thresholds(normalized_data)
-            if exceeded_thresholds:
-                logging.info(f"Thresholds exceeded in {normalized_data['room_id']}: {exceeded_thresholds}")
-            
+            try:
+                exceeded_thresholds = alert_service.check_thresholds(normalized_data)
+                if exceeded_thresholds:
+                    logging.info(f"Thresholds exceeded in {normalized_data['room_id']}: {exceeded_thresholds}")
+            except Exception as threshold_err:
+                logging.error(f"Error checking thresholds: {str(threshold_err)}")
+                exceeded_thresholds = []
+
             # Convert MongoDB ObjectId to srting for JSON serialisation
             normalized_data_response = normalized_data.copy()
             if '_id' in normalized_data_response:
@@ -297,7 +276,7 @@ def receive_sensor_data():
         
         return jsonify({"message": "Data recieved and normalized", "data": normalized_data_response, "exceeded_thresholds": exceeded_thresholds}), 200
     except Exception as e:
-        logging.error(f"Error in /api/sensor-data: {str(e)}")
+        logging.error(f"Error in /api/sensor-data: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/rooms', methods=['GET'])
@@ -707,19 +686,34 @@ def generate_fallback_response(query, temperature, humidity, flow_rate):
 def get_sensor_data():
     """Read current sensor data (temperature,humidity) from SENSE HAT"""
     try:
-        temperature = sensor.get_temperature()
-        humidity = sensor.get_humidity()
-        pressure = sensor.get_pressure()
-        
-        if temperature is None:
-            logging.warning("Temperature reading is None.Using fallback values")
+        try:
+            temperature = sensor.get_temperature()
+            if temperature is None or not isinstance(temperature, (int, float)):
+                logging.warning("Temperature reading is None.Using fallback values")
+                temperature = 22.0
+        except Exception as e:
+            logging.warning(f"Error reading temperature: {str(e)}. Using fallback value")
             temperature = 22.0
-        
-        if humidity is None:
-            logging.warning("Humidity reading is None.Using fallback values")
+
+        try:    
+            humidity = sensor.get_humidity()
+            if humidity is None or not isinstance(humidity, (int, float)):
+                logging.warning("Humidity reading is None.Using fallback values")
+                humidity = 50.0
+        except Exception as e:
+            logging.warning(f"Error reading humidity: {str(e)}. Using fallback value")
             humidity = 50.0
+
+        try:
+            pressure = sensor.get_pressure()
+            if pressure is None or not isinstance(pressure, (int, float)):
+                logging.warning("Pressure reading is None or invalid. Usin fallback value")
+                pressure = 1013.25
+        except Exception as e:
+            logging.warning(f"Error reading pressure: {str(e)}. Using fallback value")
+            pressure = 1013.25
                  
-        
+        # Normalise temperature on based on CPU temperature   
         try:
             cpu_temperature = get_cpu_temperature()
             if cpu_temperature is not None:
@@ -730,28 +724,61 @@ def get_sensor_data():
         
         except FileNotFoundError:
             logging.warning("CPU temperature unavailable,using raw temperature")
-            normalized_temperature = round(temperature,2)
+            normalized_temperature = temperature
         
-        if pressure is None:
-            logging.warning("Pressure reading is None,using fallback of 1013.25")
-            pressure = 1013.25
+        #Calculate altitude
+        try:
+            altitude   = round(44330 * (1- (pressure / 1013) ** 0.1903), 2) 
+        except Exception as e:
+            logging.warning(f"Error calculating altitude: {str(e)}")
+            altitude = 0
+        
+        # Get and format IMU data
+        try:
+            accel_raw = sensor.get_accelerometer_raw() or {"x": 0, "y": 0, "z": 0}
+            gyro_raw = sensor.get_gyroscope_raw() or {"x": 0, "y": 0, "z": 0}
+            mag_raw = sensor.get_compass_raw() or {"x": 0, "y": 0, "z": 0}
+
+            # Remove any trailing commas to make this into tuples
+
+            if isinstance(accel_raw, tuple):
+                accel_raw = accel_raw[0]
+            if isinstance(gyro_raw, tuple):
+                gyro_raw = gyro_raw[0]
+            if isinstance(mag_raw, tuple):
+                mag_raw = mag_raw[0]
             
-        altitude   = round(44330 * (1- (pressure / 1013) ** 0.1903), 2) 
-        
-        imu_data = {
-            "acceleration": sensor.get_accelerometer_raw() or {"x": 0, "y": 0, "z": 0},
-            "gyroscope": sensor.get_gyroscope_raw() or {"x": 0, "y": 0, "z": 0},
-            "magnetometer": sensor.get_compass_raw() or {"x": 0, "y": 0, "z": 0}
-        } 
-        
-        imu_data = {
-            "acceleration": [round(imu_data["acceleration"].get(key, 0), 2) for key in ["x", "y", "z"]],
-            "gyroscope": [round(imu_data["gyroscope"].get(key, 0), 2) for key in ["x", "y", "z"]],
-            "magnetometer": [round(imu_data["magnetometer"].get(key, 0), 2) for key in ["x", "y", "z"]],
+            # Safely extract the data and round it to 2
+            imu_data = {
+                "acceleration": [
+                    round(float(accel_raw.get("x", 0)), 2),
+                    round(float(accel_raw.get("y", 0)), 2),
+                    round(float(accel_raw.get("z", 0)), 2)
+                ],
+                "gyroscope": [
+                    round(float(gyro_raw.get("x", 0)), 2),
+                    round(float(gyro_raw.get("y", 0)), 2),
+                    round(float(accel_raw.get("z", 0)), 2),
+                ],
+                "magnetometer": [
+                    round(float(mag_raw.get("x", 0)), 2),
+                    round(float(mag_raw.get("y", 0)), 2),
+                    round(float(mag_raw.get("z", 0)), 2),
+                ]
             
-        }
-        normalized_temperature = round(normalized_temperature, 2)    
-        humidity = round(humidity,2)
+            }
+        except Exception as e:
+            logging.warning(f"Error processing IMU data: {str(e)}")
+            imu_data = {
+                "acceleration": [0.0, 0.0, 0.0],
+                "gyroscope": [0.0, 0.0, 0.0],
+                "magnetometer": [0.0, 0.0, 0.0]
+            }
+
+        # Ensures the final values are poerly formatted
+        normalized_temperature = round(float(normalized_temperature), 2)    
+        humidity = round(float(humidity),2)
+        pressure = round(float(pressure), 2)
         timestamp = datetime.now()
         sensor_data = {
             "temperature":normalized_temperature,
@@ -762,12 +789,21 @@ def get_sensor_data():
             "timestamp": timestamp,
             "location": "Main System"
         }
-            
-        sensor_data_collection.insert_one(sensor_data)
+
+        # Save to MongoDB
+        try:    
+            sensor_data_collection.insert_one(sensor_data)
+        except Exception as e:
+            logging.error(f"Failed to insert sensor data into MongoDB: {str(e)}")
         
-        exceeded_thresholds = alert_service.check_thresholds(sensor_data)
-        if exceeded_thresholds:
-            logging.info(f"Thresholds exceeded: {exceeded_thresholds}")
+        # Check thresholds
+        try:
+            exceeded_thresholds = alert_service.check_thresholds(sensor_data)
+            if exceeded_thresholds:
+                logging.info(f"Thresholds exceeded: {exceeded_thresholds}")
+        except Exception as e:
+            logging.error(f"Error checking thresholds: {str(e)}")
+            exceeded_thresholds = []
             
         sensor_data["_id"] = str(sensor_data["_id"])
         return jsonify(sensor_data)

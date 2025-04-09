@@ -4,7 +4,7 @@ import logging
 import boto3
 from datetime import datetime
 from flask import current_app
-
+from decimal import Decimal
 #Set up Logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -133,9 +133,9 @@ class AlertService:
     def _get_thresholds(self):
         """Retrieving threhold settings from database, with fallback defaults"""
         
-        if self.mongo_db:
+        if self.mongo_db is not None: # Comparing with none
             mongo_thresholds = self.mongo_db.thresholds.find_one({}, {"_id":0})
-            if mongo_thresholds:
+            if mongo_thresholds is not None:
                 return mongo_thresholds
             
         # Then try DynamoDB
@@ -145,7 +145,7 @@ class AlertService:
                 return response['Items'][0]
         
         except Exception as e:
-            logger.error(f"Error retrieving thresholds fromDynamoDB: {str(e)}")
+            logger.error(f"Error retrieving thresholds from DynamoDB: {str(e)}")
             
         return {
             "temperature_range": [20,25],
@@ -222,10 +222,10 @@ class AlertService:
             
             logger.info(f"SMS alert sent successfully: {response.get('MessageId')}")
         except Exception as e:
-            logger.error(f"Failed to send SMS aler: {str(e)}")
+            logger.error(f"Failed to send SMS alert: {str(e)}")
             # Logs failure in Cloudwatch
             
-    def _send_email_alert(self,subject, message, sensor_data, exceed_thresholds,thresholds):
+    def _send_email_alert(self,subject, message, sensor_data, exceeded_thresholds,thresholds):
         """Sends an email notification through AWS SES"""
         try:
             if not self.ses_email_sender or not self.ses_email_recipient:
@@ -234,7 +234,7 @@ class AlertService:
         
             html_body = self._generate_html_email(
                 sensor_data,
-                exceed_thresholds,
+                exceeded_thresholds,
                 thresholds
             )
         
@@ -369,41 +369,7 @@ class AlertService:
         """
         
         return html
-    
-    def _store_alert_history_dynamodb(self, sensor_data, exceeded_thresholds, thresholds):
-        """Stores alert information in DynamoDB for historical tracking"""
-    
-        try:
-            # Determine alert severity
-            severity = "critical" if any(t in ['temperature_high', 'temperature_low', 'humidity_high', 'humidity_low'] for t in exceeded_thresholds) else "warning"
-        
-            # Create alert item
-            alert_id = f"alert-{datetime.now().timestamp()}"
-            device_id = sensor_data.get("device_id", "unknown_device")
-            timestamp = sensor_data.get("timestamp", datetime.now().isoformat())
-            if isinstance(timestamp, datetime):
-                timestamp = timestamp.isoformat()
-            
-            alert_item = {
-                "id": alert_id,
-                "device_id": device_id,
-                "timestamp": timestamp,
-                "sensor_data": sensor_data,
-                "exceeded_thresholds": exceeded_thresholds,
-                "severity": severity,
-                "processed": True
-            }
-        
-            # Store in DynamoDB
-            alert_table_name = os.getenv("ALERT_TABLE", "Alerts")
-            alert_table = self.dynamodb.Table(alert_table_name)
-            alert_table.put_item(Item=alert_item)
-        
-            logger.info(f"Alert history stored in DynamoDB: {alert_id}")
-        
-        except Exception as e:
-            logger.error(f"Failed to store alert history in DynamoDB: {str(e)}")
-    
+
     def _is_alert_in_cache(self,key):
         """Checks if alert was recently sent to avoid any duplicates"""
         
@@ -439,6 +405,17 @@ class AlertService:
         for key in expired_keys:
             del self._alert_cache[key]
     
+    def _convert_floats_to_decimal(self,obj):
+        """Recursivley convert all float values to Decimal for DynamoDB compatability"""
+        if isinstance(obj, float):
+            return Decimal(str(obj))
+        elif isinstance(obj, dict):
+            return {k: self._convert_floats_to_decimal(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_floats_to_decimal(item) for item in obj]
+        else:
+            return obj
+        
     def _store_alert_history_dynamodb(self, sensor_data, exceeded_thresholds, thresholds):
         """Stores alert information in DynamoDB for historical tracking"""
     
@@ -449,15 +426,28 @@ class AlertService:
             # Create alert item
             alert_id = f"alert-{datetime.now().timestamp()}"
             device_id = sensor_data.get("device_id", "unknown_device")
-            timestamp = sensor_data.get("timestamp", datetime.now().isoformat())
+                 
+            # Convert all float values to decimal for DynamoDB compatability
+            sensor_data_for_dynamo = self._convert_floats_to_decimal(sensor_data.copy())
+            timestamp = sensor_data.get("timestamp", datetime.now())
+
             if isinstance(timestamp, datetime):
                 timestamp = timestamp.isoformat()
+
+            if isinstance(sensor_data_for_dynamo.get("timestamp"), datetime):
+                # Converts datetime to a string                
+                # Convert all float values to decimal for DynamoDB compatability
+                sensor_data_for_dynamo["timestamp"] = sensor_data_for_dynamo["timestamp"].isoformat()
             
+            # Remove MongoDB ObjectId which can't be serialised
+            if '_id' in sensor_data_for_dynamo:
+                del sensor_data_for_dynamo['_id']
+
             alert_item = {
                 "id": alert_id,
                 "device_id": device_id,
                 "timestamp": timestamp,
-                "sensor_data": sensor_data,
+                "sensor_data": sensor_data_for_dynamo,
                 "exceeded_thresholds": exceeded_thresholds,
                 "severity": severity,
                 "processed": True
