@@ -26,6 +26,6 @@ IoT AI generative Device developed using **Flask**,**MongoDB** via **Python** wi
 This current repository contains code for the main Raspberry Pi whilst the links below are for the seperate PI's
 
 ### Other Raspberry Pi Repositories
--Link to Device 2: https://github.com/SanRob1325/EcoDetect_Device2
--Link to Device 3: https://github.com/SanRob1325/EcoDetect_Device3
--Link to Device 4: https://github.com/SanRob1325/EcoDetect_Device4
+- [Link to EcoDetect Device 2] (https://github.com/SanRob1325/EcoDetect_Device2)
+- [Link to EcoDetect Device 3] (https://github.com/SanRob1325/EcoDetect_Device3)
+- [Link to EcoDetect Device 4] (https://github.com/SanRob1325/EcoDetect_Device4)
