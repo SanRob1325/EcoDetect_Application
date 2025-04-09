@@ -1,3 +1,4 @@
+import pytest
 from flask import Flask,jsonify,request
 from flask_cors import CORS
 import os
@@ -13,8 +14,10 @@ from boto3.dynamodb.conditions import Key
 import pandas as pd
 import numpy as np
 import random
-from cloud_services.cognito.cognito_service import verify_token
+import shutil
+from pathlib import Path
 import json
+import math
 from io import StringIO
 from sklearn.ensemble import IsolationForest
 from statsmodels.tsa.arima.model import ARIMA
@@ -31,11 +34,70 @@ ses_client = boto3.client("ses",region_name="eu-west-1")
 s3_client = boto3.client('s3', region_name='eu-west-1')
 bedrock_client = boto3.client('bedrock-runtime', region_name='eu-west-1')
 
+DATA_DIR = Path("./data")
+THRESHOLDS_FILE = DATA_DIR / "thresholds.json"
+SENSOR_DATA_DIR = DATA_DIR / "sensor_data"
+ALERTS_DIR = DATA_DIR / "alerts"
+
+# Create directories if they dont exist
+DATA_DIR.mkdir(exist_ok=True)
+SENSOR_DATA_DIR.mkdir(exist_ok=True)
+ALERTS_DIR.mkdir(exist_ok=True)
 THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
 SENSOR_TABLE = dynamodb.Table(os.getenv("SENSEHAT_TABLE", "SenseHatData"))
 WATER_TABLE = dynamodb.Table(os.getenv("WATER_TABLE", "WaterFlowData"))
 threshold_table = dynamodb.Table(THRESHOLD_TABLE)
 
+# Data base setup for mongodb for storing sensor data thresholds and aler history
+using_mongodb = False
+
+try:
+    # Try connecting with MongoDB for backward compatibility
+    logging.info("Attempting to connect with MongoDB")
+    client = MongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=2000)
+    db = client.ecodetect
+    sensor_data_collection = db.sensor_data
+    thresholds_collection = db.thresholds
+    alert_history_collection = db.alert_history
+    water_data_collection = db.water_data
+    query_logs_collection = db.query_logs
+
+    # Test connection
+    client.server_info()
+    logging.info("Connected to MongoDB successfully")
+
+    # Get thresholds from MongoDB
+    thresholds = thresholds_collection.find_one()
+    using_mongodb = True
+except Exception as e:
+    logging.warning(f"MongoDB connection failed: {e}")
+    logging.info("Using filebased storage instead")
+    using_mongodb = False
+
+    thresholds = load_json(THRESHOLDS_FILE, {
+        "temperature range": [20, 25,]
+        "humidity_range": [30, 60]
+    })
+
+    # Save defaule thresholds if they dont exist
+    if not os.path.exists(THRESHOLDS_FILE):
+        save_json(THRESHOLDS_FILE, thresholds)
+
+def save_json(file_path, data):
+    """Save data to aJSON file"""
+    with open(file_path, 'w') as f:
+        json.dump(data, f, default=str)
+    return True
+def load_json(file_path, default=None):
+    """Load data from a json file"""
+    try:
+        if not file_path.exists():
+            return default
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.error(f"error loading {file_path}: {e}")
+        return default
 #Database setup in MongoDB for storing sensor data,thresholds and alert history
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client.ecodetect
@@ -72,6 +134,13 @@ latest_co2_data = None
 latest_flow_data = None
 #function to get thresholds,falling back to deafts if non are set
 
+class FileStorageAlertService:
+    def __init__(self, sns_client, ses_client, dynamodb, mongo_db=None):
+        self.sns_client = sns_client
+        self.ses_client = ses_client
+        self.dynamodb = dynamodb
+        self.mongo_db = mongo_db 
+
 # create alert service
 
 alert_service= AlertService(
@@ -80,6 +149,8 @@ alert_service= AlertService(
     dynamodb=dynamodb,
     mongo_db=db
 )
+
+    
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple check for checking enpoint API's are working"""
@@ -96,6 +167,16 @@ def calculate_carbon_footprint(data):
         footprint += data["altitude"] * 0.1
     if "pressure" in data:
         footprint += data["pressure"] * 0.05
+    
+    # Vehicle movement impact
+    try:
+        movement_data = get_current_vehicle_movement()
+        if movement_data:
+            vehicle_impact = calculate_vehicle_impact(movement_data)
+            footprint += vehicle_impact
+    except Exception as e:
+        logging.error(f"Error including vehicle data in carbon footprint: {str(e)}")
+        
     return min(footprint, 100) # up to 100%
 
 def fetch_s3_csv(bucket_name, file_key):
@@ -180,7 +261,7 @@ def receive_sensor_data():
         if not raw_data:
             return jsonify({"error": "Empty request body"}), 400
         
-        required_keys = ["temperature", "humidity", "pressure"]
+        required_keys = ["temperature", "humidity", "pressure", "room_id"]
         missing_keys = [key for key in required_keys if key not in raw_data]
         if missing_keys:
             return jsonify({"error": f"Missing required keys: {missing_keys}"}), 400
@@ -188,28 +269,69 @@ def receive_sensor_data():
         normalized_data = normalize_sensor_data(raw_data)
         #add time stamp
         normalized_data['timestamp'] = datetime.now()
-        normalized_data['location'] = raw_data.get('location', 'Secondary System')
+        normalized_data['location'] = raw_data.get('location', 'Unknown Room')
+        normalized_data['room_id'] = raw_data.get('room_id', 'unknown')
+        normalized_data['device_id'] = raw_data.get('device_id', 'unknown')
         
         logging.debug(f"Normalised Data: {normalized_data}")
         
         try:
-            result = sensor_data_collection.insert_one(normalized_data)
+            if using_mongodb:
+                # this also includes room_id in MongoDB query to allow filtering
+                result = sensor_data_collection.insert_one(normalized_data)
             if not result.inserted_id:
                 raise Exception("Failed to insert data into MongoDB")
 
             exceeded_thresholds = alert_service.check_thresholds(normalized_data)
             if exceeded_thresholds:
-                logging.info(f"Thresholds exceeded: {exceeded_thresholds}")
+                logging.info(f"Thresholds exceeded in {normalized_data['room_id']}: {exceeded_thresholds}")
+            
+            # Convert MongoDB ObjectId to srting for JSON serialisation
+            normalized_data_response = normalized_data.copy()
+            if '_id' in normalized_data_response:
+                normalized_data_response['_id'] = str(normalized_data_response['_id'])
                 
         except Exception as e:
             logging.error(f"MongoDB insertion error: {str(e)}")
             return jsonify({"error": "Failed to insert sensor data"}), 500
         
-        return jsonify({"message": "Data recieved and normalized", "data": normalized_data, "exceeded_thresholds": exceeded_thresholds}), 200
+        return jsonify({"message": "Data recieved and normalized", "data": normalized_data_response, "exceeded_thresholds": exceeded_thresholds}), 200
     except Exception as e:
         logging.error(f"Error in /api/sensor-data: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/rooms', methods=['GET'])
+def get_room_list():
+    """Get list of all rooms with sensors"""
+    try:
+        # Distinct query to find all unique room_ids
+        rooms = sensor_data_collection.distinct("room_id")
+        return jsonify(rooms)
+    except Exception as e:
+        logging.error(f"Error getting room list: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/sensor-data/<room_id>', methods=['GET'])
+def get_room_sensor_data(room_id):
+    """Get sensor data for a specific room"""
+    try:
+        # Find the latest data for this room
+        latest_data = sensor_data_collection.find_one(
+            {"room_id": room_id},
+            sort=[("timestamp", -1)]
+        )
+        
+        if not latest_data:
+            return jsonify({"error": f"No data found for room: {room_id}"}), 
+        
+        # Conver ObjectId to string for serialisation
+        latest_data["_id"] = str(latest_data["_id"])
+        
+        return jsonify(latest_data)
+    except Exception as e:
+        logging.error(f"Error in room sensor data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
 # monitoring thresholds
 @app.route('/api/monitor-thresholds', methods=['POST'])
 def monitor_thresholds():
@@ -1562,6 +1684,223 @@ def test_email_alert():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/vehicle-movemnt', methods=['GET'])
+def get_vehicle_movement():
+    """Get processed vehicle movement data from IMU sensors"""
+    try:
+        # Read directly from SenseHat
+        acceleration = sensor.get_accelerometer_raw()
+        gyroscope = sensor.get_gyroscope_raw()
+        magnetometer = sensor.get_compass_raw()
+        
+        # Conver dictionary to list format
+        imu_data = {
+            "acceleration": [acceleration["x"], acceleration["y"], acceleration["z"]],
+            "gyroscope": [gyroscope["x"], gyroscope["y"], gyroscope["z"]],
+            "magnetometer": [magnetometer["x"], magnetometer["y"], magnetometer["z"]]
+        }
+        
+        # Processed raw IMU data into meaningful vehicle metrics
+        processed_data = process_vehicle_movement(imu_data)
+        processed_data["timestamp"] = datetime.now().isoformat()
+        
+        # Store the processed data for historical purposes
+        vehicle_data = {
+            "temperature": sensor.get_temperature(),
+            "humidity": sensor.get_humidity(),
+            "pressure": sensor.get_pressure(),
+            "imu": imu_data,
+            "timestamp": datetime.now(),
+            "room_id": "vehicle",
+            "device_id": "main_pi",
+            "location": "Vehicle",
+            "processed_movement": processed_data
+        }
+        
+        # Save to database
+        sensor_data_collection.insert_one(vehicle_data)
+        
+        return jsonify(processed_data)
+    except Exception as e:
+        logging.error(f"Error in vehicle movement data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def process_vehicle_movement(imu_data):
+    """Convert raw IMU data into meaningful vehicle movement metrics"""
+    # Extract values from IMU data
+    accel = imu_data.get("acceleration", [0, 0, 0])
+    gyro = imu_data.get("gyroscope", [0, 0, 0])
+    mag = imu_data.get("magnetometer", [0, 0, 0])
+    
+    # Calculate acceleration magnitude (G-Force)
+    accel_magnitude = math.sqrt(sum(x*x for x in accel))
+    
+    # Calculate rotation rate (degrees per second)
+    rotation_rate = math.sqrt(sum(x*x for x in gyro))
+    
+    # Determine vehical orientation roughly
+    try:
+        pitch = math.atan2(accel[0], math.sqrt(accel[1]**2 + accel[2]**2)) * 180 / math.pi
+        roll = math.atan2(accel[1], math.sqrt(accel[0]**2 + accel[2]**2)) * 180 / math.pi
+    except:
+        pitch, roll = 0, 0
+        
+    # Vehicle heading (compass direction) which requires calibration for accuracy
+    try:
+        heading = math.atan2(mag[1], mag[0]) * 180 / math.pi
+        if heading < 0:
+            heading += 360
+    except:
+        heading = 0
+    
+    # Classify movement type
+    movement_type = classify_movement(accel, gyro)
+    
+    return {
+        "accel_magnitude": round(accel_magnitude, 2), # For total G-Force
+        "rotation_rate": round(rotation_rate, 2), # degrees per second
+        "orientation": {
+            "pitch": round(pitch, 2), # Forward and backward til
+            "roll": round(roll, 2), # Side to side tilt
+            "heading": round(heading, 2) # Compass direction
+        },
+        "movement_type": movement_type, # Movement classification
+        "raw_data": { # Original reference
+            "acceleration": accel,
+            "gyroscope": gyro,
+            "magnetometer": mag 
+        }
+    }
+
+def classify_movement(accel, gyro):
+    """Classifying the type of vehicle movement based on IMU data"""
+    accel_magnitude = math.sqrt(sum(x*x for x in accel))
+    gyro_magnitude = math.sqrt(sum(x*x for x in gyro))
+    
+    # Detect sudden acceleration and breaking
+    if accel[0] > 0.5: # Forawrd acceleration
+        return "accelerating"
+    elif accel[0] < -0.5:
+        return "braking"
+    
+    # Detect turning
+    if gyro[2] > 0.3: # Turning right
+        return "turning_right"
+    elif gyro[2] < -0.3: # Turning left
+        return "turning_left"
+    
+    # Detect bumps on the road
+    if abs(accel[1]) > 0.8: # Vertical acceleration
+        return "rough_road"
+    
+    # If none of the above work, the vehicle stopped of is slow
+    if accel_magnitude < 0.1:
+        return "stationary"
+    else:
+        return "steady_movement"
+
+@app.route('/api/vehicle-movement-history', methods=['GET'])
+def get_vehicle_movement_history():
+    """Get historical vehicle movement data for analysis"""
+    try:
+        # Get time range from query parameters from the last hour
+        hours = int(request.args.get('hours', 1))
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        
+        # Find all records with IMU data in given time range
+        cursor = sensor_data_collection.find(
+            {
+                
+                "room_id": "vehicle",
+                "timestamp": {"$gte": cutoff_time}
+            }, 
+            sort=[("timestamp", 1)]    
+        )
+        
+        # Process and format the data
+        movement_history = []
+        for record in cursor:
+            if "proccessed_movement" in record:
+                # Use pre-processed data if available
+                processed_data = record["processed_movement"]
+                processed_data["timestamp"] = record["timestamp"].isoformat()
+                movement_history.append(processed_data)
+            elif "imu" in record:
+                # Process IMU data if needed
+                processed_data = process_vehicle_movement(record["imu"])
+                processed_data["timestamp"] = record["timestamp"].isoformat()
+                movement_history.append(processed_data)
+        
+        return jsonify(movement_history)
+    except Exception as e:
+        logging.error(f"Error in vehicle movement history: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/vehicle-carbon-impact', methods=['GET'])
+def get_vehicle_carbon_impact():
+    """Get carbon footprint specifically from vehicle movement"""
+    try:
+        # Get the latest movement data
+        latest_movement = get_current_vehicle_movement()
+        
+        if not latest_movement:
+            return jsonify({"impact": 0, "message": "No vehicle data vailable"})
+        
+        # Calculate impact based on movement data 
+        vehicle_impact =  calculate_vehicle_impact(latest_movement)
+        
+        return jsonify({
+            "impact": vehicle_impact,
+            "timestamp": datetime.now().isoformat(),
+            "movement_data": latest_movement
+        })  
+    except Exception as e:
+        logging.error(f"Error calcualting vehicle carbon impact: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def get_current_vehicle_movement():
+    """Get the current vehicle movement data"""
+    try:
+        # Read directly from SenseHat
+        acceleration = sensor.get_accelerometer_raw()
+        gyroscope = sensor.get_gyroscope_raw()
+        magnetometer = sensor.get_compass_raw()
+        
+        # Convert dictionary to list format
+        imu_data = {
+            "acceleration": [acceleration["x"], acceleration["y"], acceleration["z"]],
+            "gyroscope": [gyroscope["x"], gyroscope["y"], gyroscope["z"]],
+            "magnetometer": [magnetometer["x"], magnetometer["y"], magnetometer["z"]]
+        }
+        
+        return process_vehicle_movement(imu_data)
+    except Exception as e:
+        logging.error(f"Error getting current vehicle movement: {str(e)}")
+        return None
+
+def calculate_vehicle_impact(movement_data):
+    """Calculate carbon impact from vehicle movement patterns"""
+    if not movement_data:
+        return 0
+    
+    impact = 0
+    
+    # Base impact from acceleration
+    accel_magnitude = movement_data.get("accel_magnitude", 0)
+    impact += accel_magnitude * 1.5
+    
+    # Additional imapct based on movement type
+    movement_type = movement_data.get("movement_type","")
+    if movement_type == "accelerating":
+        impact += 2.0 # Acceleration uses more fuel
+    elif movement_type == "braking":
+        impact += 1.0 # Frequent breking indicates inefficient driving
+    elif movement_type == "rough_road":
+        impact += 0.8 # Rough roads can decrease effciency of movement
+        
+    # Rationalises the impact on the environment at 50%
+    return min(impact, 50)
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port=5000)

@@ -62,7 +62,7 @@ const RoomMonitor = () => {
         // Set up polling
         const interval = setInterval(fetchAllRoomData, 10000);
         return () => clearInterval(interval);
-    }, [rooms, roomData]);
+    }, [rooms]);
 
     if (loading && rooms.length === 0){
         return <Spin size="large" />;
