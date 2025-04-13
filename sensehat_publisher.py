@@ -71,7 +71,7 @@ def calibrate_temperature(raw_temp):
     """Apply dynamic temperature calibration based on CPU temperature"""
     cpu_temp = get_cpu_temperature()
     if cpu_temp is None:
-        return raw_temp + TEMP_CORRECTION_FACTOR
+        return raw_temp - TEMP_CORRECTION_FACTOR
     
     # Dynamic calibration formula based on CPU and SenseHat temperature difference
     factor = (cpu_temp - raw_temp) / 5.466
@@ -108,7 +108,7 @@ def check_thresholds(sensor_data):
     if "humidity" in sensor_data and sensor_data["humidity"] is not None:
         if sensor_data["humidity"] > HUMIDITY_THRESHOLD_HIGH:
             exceeded_thresholds.append("humidity_high")
-        elif sensor_data["temperature"] < HUMIDITY_THRESHOLD_LOW:
+        elif sensor_data["humidity"] < HUMIDITY_THRESHOLD_LOW:
             exceeded_thresholds.append("humidity_low")
             
     # Check cache to avoid sending repeated alerts

@@ -1,5 +1,5 @@
 import pytest
-from flask import Flask,jsonify,request
+from flask import Flask,jsonify,request,g
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
@@ -16,6 +16,9 @@ import numpy as np
 import random
 import json
 import math
+import requests
+from jose import jwt, jwk
+from jose.utils import base64url_decode
 from io import StringIO
 from sklearn.ensemble import IsolationForest
 from statsmodels.tsa.arima.model import ARIMA
@@ -24,7 +27,7 @@ import time
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*", "supports_credentials": True}}, expose_headers=["Authorization"])
 app.register_blueprint(report_routes)
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
 sns_client = boto3.client("sns", region_name="eu-west-1")
@@ -54,6 +57,10 @@ SNS_TOPIC_ARN= os.getenv("SNS_TOPIC_ARN")
 SES_EMAIL_RECIPIENT = os.getenv("SES_EMAIL_RECIPIENT")
 SES_EMAIL_SENDER = os.getenv("SES_EMAIL_SENDER")
 
+# Cognito configuration
+REGION = os.getenv("AWS_REGION", "eu-west-1")
+USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
+APP_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
 #Retrieve thresholds if the defauls are not set
 thresholds = thresholds_collection.find_one()
 #Sense Hat temperature, humidity, pressure    
@@ -73,8 +80,193 @@ latest_co2_data = None
 latest_flow_data = None
 #function to get thresholds,falling back to deafts if non are set
 
-# create alert service
+# Fetch JWT jeys from Cognito
+jwkeys_url = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
+try:
+    response = requests.get(jwkeys_url)
+    response.raise_for_status()
+    jwks = requests.get(jwkeys_url).json()
 
+    if 'keys' not in jwks:
+        logging.error("WKS response does not contain 'keys'")
+        jwks = {"keys": []}
+except Exception as e:
+    logging.error(f"Error fetching Cognito JWKS: {str(e)}")
+    jwks = {"keys": []}
+
+def verify_token(token):
+    """Verify the Cognito JWT token"""
+    try:
+        # Get the key id from the token header
+        headers = jwt.get_unverified_headers(token)
+        kid = headers.get('kid')  # Use get() to avoid KeyError
+        if not kid:
+            logging.error("No 'kid' found in token header")
+            return False, None
+
+        # Find the corresponding key in the JWKs
+        key = None
+        for k in jwks.get('keys', []):
+            if k.get('kid') == kid:
+                key = k
+                break
+        
+        if not key:
+            logging.error(f"No matching key found for kid: {kid}")
+            return False, None
+        
+        # Get the public key
+        public_key = jwk.construct(key)
+
+        # Verify the signature
+        message, encoded_signature = token.rsplit('.', 1)
+        decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
+
+        # Verify the signature
+        if not public_key.verify(message.encode('utf-8'), decoded_signature):
+            logging.error("Token signature verification failed")
+            return False, None
+        
+        # Verify the claims
+        claims = jwt.get_unverified_claims(token)
+
+        # Check if the token has expired
+        if time.time() > claims.get('exp', 0):
+            logging.error("Token has expired")
+            return False, None
+        
+        # Check the client_id/audience - handle multiple attribute names
+        client_id = claims.get('client_id') or claims.get('aud')
+        if not client_id or client_id != APP_CLIENT_ID:
+            logging.error(f"Invalid client_id: {client_id} != {APP_CLIENT_ID}")
+            return False, None
+            
+        # Log successful verification
+        logging.debug(f"Token verified successfully for user: {claims.get('email', 'unknown')}")
+        return True, claims
+    except Exception as e:
+        logging.error(f"Token verification error: {str(e)}")
+        return False, None
+
+@app.before_request
+def auth_middleware():
+    """Middleware to verify authentication token"""
+    # Log the current request path
+    logging.debug(f"Request to: {request.path} with method {request.method}")
+
+    # Skip preflight requests
+    if request.method == 'OPTIONS':
+        logging.debug("Skipping OPTIONS preflight request")
+        return
+
+    # Skip token verification for public endpoints
+    if request.path in ['/api/health', '/api/login', '/api/sensor-data-upload', '/api/predictive-analysis','/api/debug/add-test-water-data']:
+        logging.debug(f"Skipping auth for public endpoint: {request.path}")
+        return
+    
+    # Get the token from the Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        logging.warning(f"Missing Authorization header for {request.path}")
+        return jsonify({"error": "Unauthorized: Missing token"}), 401
+        
+    if not auth_header.startswith('Bearer '):
+        logging.warning(f"Invalid Authorization format for {request.path}")
+        return jsonify({"error": "Unauthorized: Invalid token format"}), 401
+    
+    token = auth_header.split(' ')[1]
+    # Add additional debug logging
+    logging.debug(f"Validating token for path: {request.path}")
+    
+    valid, claims = verify_token(token)
+
+    if not valid:
+        logging.warning(f"Invalid token for {request.path}")
+        return jsonify({"error": "Unauthorized: Invalid token"}), 401
+    
+    # Store user info in the request context
+    g.user = {
+        "user_id": claims.get('sub', 'unknown'),
+        "email": claims.get('email', 'unknown'),
+        "name": claims.get('name', 'User')
+    }
+    
+    logging.debug(f"User {g.user['email']} authenticated for {request.path}")
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Simple login endpoint for testing authentication"""
+    try:
+        data = request.json
+        username = data.get('email') or data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({"error": "Missing email/username or password"}), 400
+            
+        # In a real app, you'd validate with Cognito
+        # This is just a mock endpoint for testing
+        return jsonify({
+            "message": "Login successful",
+            "note": "This is a mock endpoint. Real authentication happens client-side with Cognito."
+        })
+    except Exception as e:
+        logging.error(f"Login error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Near the top of your file, add a function to refresh JWKs
+def refresh_jwks():
+    global jwks
+    jwkeys_url = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
+    try:
+        logging.info("Fetching Cognito JWKs...")
+        response = requests.get(jwkeys_url)
+        response.raise_for_status()
+        jwks = response.json()
+
+        logging.info(f"JWKs keys fetched: {[key['kid'] for key in jwks.get('keys', [])]}")
+        if 'keys' not in jwks:
+            logging.error("JWKs response does not contain 'keys'")
+            jwks = {"keys": []}
+        else:
+            logging.info(f"Successfully fetched {len(jwks['keys'])} JWK keys")
+    except Exception as e:
+        logging.error(f"Error fetching Cognito JWKS: {str(e)}")
+        jwks = {"keys": []}
+
+# Call this at startup
+refresh_jwks()
+
+# Optional: Set up a background thread to refresh keys periodically
+from threading import Thread
+import time
+
+def jwks_refresh_thread():
+    while True:
+        time.sleep(3600)  # Refresh every hour
+        refresh_jwks()
+
+# Start the refresh thread
+Thread(target=jwks_refresh_thread, daemon=True).start()
+
+@app.route('/api/auth-test', methods=['GET'])
+def auth_test():
+    """Test endpoint to verify authentication is working"""
+    try:
+        # This endpoint will only be accessible if auth middleware passes
+        return jsonify({
+            "authenticated": True,
+            "user": {
+                "user_id": g.user.get("user_id"),
+                "email": g.user.get("email"),
+                "name": g.user.get("name")
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logging.error(f"Auth test error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# create alert service
 alert_service= AlertService(
     sns_client=sns_client,
     ses_client=ses_client,
@@ -1721,7 +1913,7 @@ def test_email_alert():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/vehicle-movemnt', methods=['GET'])
+@app.route('/api/vehicle-movement', methods=['GET'])
 def get_vehicle_movement():
     """Get processed vehicle movement data from IMU sensors"""
     try:
@@ -1937,6 +2129,7 @@ def calculate_vehicle_impact(movement_data):
         
     # Rationalises the impact on the environment at 50%
     return min(impact, 50)
+
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port=5000)

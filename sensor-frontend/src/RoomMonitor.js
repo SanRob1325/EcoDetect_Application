@@ -1,8 +1,7 @@
 import React, {useState, useEffect} from 'react';
-import axios from 'axios';
 import {Card, Tabs, Spin} from 'antd';
 import GaugeChart from 'react-gauge-chart';
-
+import apiService from './apiService';
 const {TabPane} = Tabs;
 
 const RoomMonitor = () => {
@@ -14,7 +13,7 @@ const RoomMonitor = () => {
     useEffect(() => {
         const fetchRooms = async () => {
             try{
-                const response = await axios.get('http://localhost:5000/api/rooms');
+                const response = await apiService.getRooms();
                 setRooms(response.data);
 
                 // Initialise data structure for each room
@@ -43,7 +42,7 @@ const RoomMonitor = () => {
 
             for (const room of rooms){
                 try{
-                    const response = await axios.get(`http://localhost:5000/api/sensor-data/${room}`)
+                    const response = await apiService.getRoomSensorData(room)
                     updatedData[room] = response.data;
                 }catch (error) {
                     console.error(`Error fetching data for room ${room}:`, error);

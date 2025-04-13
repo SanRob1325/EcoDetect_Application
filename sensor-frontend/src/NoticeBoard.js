@@ -1,5 +1,5 @@
 import React, {useState,useEffect} from 'react';
-import axios from 'axios'
+import apiService from './apiService';
 import './Noticeboard.css';//import CSS styling
 
 const NoticeBoard = () => {
@@ -8,7 +8,7 @@ const NoticeBoard = () => {
 //Fetch notifications from the Flask backend
     const fetchAlerts = async () => {
         try{
-            const response = await axios.get('http://localhost:5000/api/alerts');
+            const response = await apiService.getAlerts();
             setAlerts(response.data)
             setError(null)
         }catch (error){

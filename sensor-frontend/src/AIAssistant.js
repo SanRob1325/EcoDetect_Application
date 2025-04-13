@@ -1,5 +1,5 @@
 import React,{useCallback, useEffect, useState} from 'react';
-import axios from 'axios';
+import apiService from './apiService';
 import {Input,Button,Card,Typography,Spin,Select,Alert, DatePicker} from 'antd'
 import {Line} from 'react-chartjs-2';
 import moment from 'moment';
@@ -36,10 +36,7 @@ const AIAssistant = () => {
     const fetchPredictiveData = useCallback (async () => {
         setLoading(true);
         try{
-            const response = await axios.get(`http://localhost:5000/api/predictive-analysis`, {
-                params: { data_type: dataType, days},
-                headers: { 'Content-Type': 'application/json'} 
-            });
+            const response = await apiService.getPredictiveAnalysis(dataType, days)
             console.log("Predictive data:", response.data);
             if (response.data && response.data.error) {
                 setAlertMessage(`Error: ${response.data.error}`)
@@ -76,7 +73,7 @@ const AIAssistant = () => {
         setAiResponse(''); // Clear previous response
         try{
             await fetchPredictiveData();
-            const response = await axios.post('http://localhost:5000/api/ai-assistant',{
+            const response = await apiService.queryAIAssistant({
                 query: `Provide redictive analysis: ${userQuery}`,
             })
             setAiResponse(response.data.answer); //Sets AI response

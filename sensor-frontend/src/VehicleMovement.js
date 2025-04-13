@@ -1,5 +1,5 @@
 import React, { useState, useEffect} from 'react';
-import axios from 'axios';
+import apiService from './apiService';
 import { Card, Row, Col, Statistic, Progress, Select, Spin, Alert} from 'antd';
 import {CarOutlined, CompassOutlined, ThunderboltOutlined, BulbOutlined} from '@ant-design/icons';
 import { Line } from 'react-chartjs-2';
@@ -18,7 +18,7 @@ const VehicleMovement = () => {
     useEffect(() => {
         const fetchMovementData = async () => {
             try{
-                const response = await axios.get('http://localhost:5000/api/vehicle-movement');
+                const response = await apiService.getVehicleMovement();
                 setMovementData(response.data);
                 setError(null);
             } catch (e) {
@@ -37,7 +37,7 @@ const VehicleMovement = () => {
         const fetchHistoryData = async () => {
             setLoading(true);
             try {
-                const response = await axios.get(`http://localhost:5000/api/vehicle-movement-history?hours=${timeRange}`);
+                const response = await apiService.getVehicleMovementHistory();
                 setHistoryData(response.data);
                 setError(null);       
             } catch (e){

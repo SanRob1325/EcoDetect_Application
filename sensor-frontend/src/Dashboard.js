@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'; 
-import axios from 'axios'; // Avios is used for HTTP requests. Reference: https://axios-http.com/docs/intro
 import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://antoniolago.github.io/react-gauge-component/ and https://www.npmjs.com/package/react-gauge-chart
 import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar, Checkbox } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
 import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
@@ -8,6 +7,7 @@ import {notification, Badge, List, Typography} from 'antd';
 import Alerts from './Alerts';
 import CarbonFootprintCard from './CarbonFootprint';
 import ReportCard from './ReportCard';
+import apiService from './apiService';
 const {Text} = Typography
 
 const { Option } = Select;
@@ -61,7 +61,7 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchAlerts = async() => {
             try{
-                const response = await axios.get('http://localhost:5000/api/alerts')
+                const response = await apiService.getAlerts()
                 setAlerts(response.data)
 
                 // Show notification for the most recent alert if its new
@@ -87,7 +87,7 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchNotificationPrefs = async () => {
             try{
-                const response = await axios.get('http://localhost:5000/api/notification-preferences')
+                const response = await apiService.getNotificationPreferences()
                 setNotificationPrefs(response.data);
             } catch (error){
                 console.error('Error fetching notification preferences:', error)
@@ -97,18 +97,10 @@ const Dashboard = () => {
         fetchNotificationPrefs();
     }, [])
 
-    const updateNotificationPrefs = async () => {
-        try{
-            await axios.post('http://localhost:5000/api/notification-preferences', notificationPrefs);
-            alert('Notification preferences updated successfully')
-        }catch(error){
-            console.error('Error updating notification preferences:', error)
-        }
-    }
     useEffect(() => {
         const fetchWaterFlowData = async() => {
             try{
-                const response = await axios.get('http://localhost:5000/api/water-usage')
+                const response = await apiService.getWaterUsage()
                 setWaterFlow(response.data.flow_rate);
                 setWaterUnit(response.data.unit);
             } catch (error){
@@ -129,7 +121,7 @@ const Dashboard = () => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const response = await axios.get('http://localhost:5000/api/sensor-data');
+                const response = await apiService.getSensorData();
                 const normalisedTemperature = normaliseTemperature(response.data.temperature);
                 setData({
 
@@ -148,27 +140,13 @@ const Dashboard = () => {
         return () => clearInterval(interval);
     }, []);
 
-    useEffect(() => {
-        const fetchWaterFlowData = async () => {
-            try {
-                const response = await axios.get(`http://localhost:5000/api/water-usage`);
-                setWaterFlow(response.data.flow_rate);
-            } catch (error) {
-                console.error('Error fetching water flow data', error);
-            }
-        };
-            fetchWaterFlowData();
-            const interval = setInterval(fetchWaterFlowData, 5000);
-            return () => clearInterval(interval);
-        }, []);
         
-
 
 //fetches ranges for co2 and temperature  References:https://blog.logrocket.com/understanding-axios-get-requests/
     useEffect(() => {
         const fetchCo2Trends = async () => {
             try {
-                const response = await axios.get(`http://localhost:5000/api/co2-trends?range=${selectedRange}`);
+                const response = await apiService.getCo2Trends(selectedRange);
                 setCo2Trends(response.data);
             } catch (error) {
                 console.error('Error fetching CO2 trends', error);
@@ -180,7 +158,7 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchTrends = async () => {
             try {
-                const response = await axios.get(`http://localhost:5000/api/temperature-trends?range=${selectedRange}`);
+                const response = await apiService.getTemperatureTrends(selectedRange);
                 setTemperatureTrends(response.data)
             } catch (error) {
                 console.error("Error fetching temperature trends", error);
@@ -194,7 +172,7 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchThresholds = async () => {
             try {
-                const response = await axios.get('http://localhost:5000/api/get-thresholds');
+                const response = await apiService.getThresholds();
                 setThresholds(response.data);
             } catch (error) {
                 console.error('Error fetching thresholds', error)
@@ -209,7 +187,7 @@ const Dashboard = () => {
     const updateThresholds = async () => {
         setIsUpdatingThresholds(true)
         try {
-            await axios.post('http://localhost:5000/api/set-thresholds', thresholds)
+            await apiService.setThresholds(thresholds);
             alert('Thresholds updated successfully!')
         } catch (error) {
             console.error('Error updating thresholds', error);
@@ -217,6 +195,15 @@ const Dashboard = () => {
             setIsUpdatingThresholds(false)
         }
     };
+
+    const updateNotificationPrefs = async () => {
+        try{
+            await apiService.setNotificationPreferences(notificationPrefs);
+            alert('Notigication preferences updated successfully')
+        }catch (error) {
+            console.error('Error updating notification preferences:',error)
+        }
+    }
 
 //caluclation of threshold ranges for temperature and humidity
     const tempValue = data.temperature !== null
@@ -244,10 +231,7 @@ const Dashboard = () => {
         setLoadingAI(true);
         
         try{
-            const { data } = await axios.post('http://localhost:5000/api/ai-assistant', {
-                query: message.trim()
-            });
-
+            const { data } = await apiService.queryAIAssistant(message.trim());
             //Update chat history with AI response
             setChatHistory(prev => [
                 ...prev.slice(0, -1),

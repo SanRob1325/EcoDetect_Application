@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import axios from 'axios';
+import apiService from './apiService';
 import {Card, Form, Select, Button, Checkbox, DatePicker, message, Spin, Tabs, Alert, Typography, Space, Modal, Divider, Input, Empty} from 'antd'
 import {DownloadOutlined, FileTextOutlined, MailOutlined, LineChartOutlined} from '@ant-design/icons';
 import moment from 'moment';
@@ -57,7 +57,7 @@ const ReportGenerator = () => {
              }
 
              // Send request to preview report
-             const response = await axios.post('http://localhost:5000/api/reports/preview', payload)
+             const response = await apiService.previewReport(payload);
 
              if (response.data.success) {
                 console.log('Preview data recieved:', response.data.data);
@@ -100,7 +100,7 @@ const ReportGenerator = () => {
             }
 
             // Send request to generate report
-            const response = await axios.post('http://localhost:5000/api/reports', payload);
+            const response = await apiService.generateReport(payload);
 
             if (response.data.success) {
                 setReportUrl(response.data.download_url);
@@ -271,7 +271,7 @@ const ReportGenerator = () => {
                 </Form>
                 {/* Preview Modal*/}
                 <Modal
-                        title="Report PReview"
+                        title="Report Preview"
                         visible={previewVisible}
                         onCancel={() => setPreviewVisible(false)}
                         width={800}

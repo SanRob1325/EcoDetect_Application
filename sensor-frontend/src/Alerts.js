@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {Card, Form, InputNumber,Switch, Button, Slider, message, notification} from 'antd';
-import axios from 'axios'
+import {Card, Form, InputNumber,Switch, Button, message} from 'antd';
+import apiService from './apiService';
 //Settings page inspiration:https://plainenglish.io/blog/how-to-build-a-user-settings-page
 //State to hold the settings for temperature,humidity,CO2 and notification preferences
 const SettingsPage = () => {
@@ -13,9 +13,9 @@ const SettingsPage = () => {
             try{
                 setLoading(true);
                 // Fetch thresholds
-                const thresholdResponse = await axios.get('http://localhost:5000/api/get-thresholds');
+                const thresholdResponse = await apiService.getThresholds();
                 // Fetch notification preferences
-                const prefsResponse = await axios.get('http://localhost:5000/api/notification-preferences');
+                const prefsResponse = await apiService.getNotificationPreferences();
                 
                 // Set form values based on API response
                 form.setFieldsValue({
@@ -52,14 +52,14 @@ const SettingsPage = () => {
             setLoading(true);
 
             // Update thresholds
-            await axios.post('http://localhost:5000/api/set-thresholds', {
+            await apiService.setThresholds({
                 temperature_range: [values.temperature.low, values.temperature.high],
                 humidity_range: [values.humidity.low, values.humidity.high],
                 flow_rate_threshold: values.water.threshold
             });
 
             // Update notification preferences
-            await axios.post('http://localhost:5000/api/notification-preferences', {
+            await apiService.setNotificationPreferences({
                 email_enabled: values.notificationPreferences.email,
                 sms_enabled: values.notificationPreferences.sms,
                 critical_only: values.notificationPreferences.criticalOnly

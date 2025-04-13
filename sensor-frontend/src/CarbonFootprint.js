@@ -1,7 +1,6 @@
-import React, {useState, useEffect} from 'react';
-import axios from 'axios';
+import React, {useState, useEffect, useCallback} from 'react';
 import { Card, Progress,Spin} from 'antd';
-import { warnContext } from 'antd/es/config-provider';
+import apiService from './apiService';
 
 const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
     const [carbonFootprint, setCarbonFootprint] = useState(0);
@@ -9,7 +8,7 @@ const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
     const [error, setError] = useState(null);
     const [source, setSource] = useState('api');
 
-    const calculateLocalFootprint = () => {
+    const calculateLocalFootprint = useCallback(() => {
         // Only calculate if we have necessary data
         if (
             sensorData &&
@@ -34,13 +33,13 @@ const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
             setSource('local');
             setError(null);
         }
-    };
+    }, [sensorData, waterFlow]);
 
     useEffect(() =>{
         const fetchCarbonFootprint = async () => {
             try{
                 setLoading(true)
-                const response = await axios.get('http://localhost:5000/api/carbon-footprint');
+                const response = await apiService.getCarbonFootprint();
                 
                 if (response.data && response.data.carbon_footprint !== undefined) {
                     setCarbonFootprint(response.data.carbon_footprint);
@@ -66,7 +65,7 @@ const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
         // Refresh carbon footprint data every 10 seconds
         const interval = setInterval(fetchCarbonFootprint, 10000);
         return () => clearInterval(interval);
-    }, []);
+    }, [calculateLocalFootprint]);
 
     useEffect(() => {
         // Second approach is to calculate locall if API fails or retunrs invalid data
@@ -75,7 +74,7 @@ const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
             calculateLocalFootprint();
         }
 
-    }, [sensorData, waterFlow, source, carbonFootprint]);
+    }, [sensorData, waterFlow, source, carbonFootprint, calculateLocalFootprint]);
     
 
     return (
