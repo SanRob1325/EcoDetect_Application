@@ -9,12 +9,17 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "antd": "^5.22.2",
+<<<<<<< HEAD
     "aws-amplify": "^6.14.2",
     "axios": "^1.7.7",
     "bignumber.js": "^9.2.1",
     "chart.js": "^4.4.8",
     "crypto-js": "^4.2.0",
     "moment": "^2.30.1",
+=======
+    "aws-amplify": "^6.10.2",
+    "axios": "^1.8.2",
+>>>>>>> 95db0b6c9e4d46576814f6a9d93b7d7939042e58
     "react": "^18.3.1",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^18.3.1",
