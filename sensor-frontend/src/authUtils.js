@@ -1,6 +1,5 @@
 import { Amplify } from 'aws-amplify';
 import {
-    fetchAuthSession,
     getCurrentUser,
     signIn as amplifySignIn,
     signOut as amplifySignOut,
@@ -9,7 +8,6 @@ import {
     confirmResetPassword,
     fetchUserAttributes
 } from '@aws-amplify/auth';
-import { cognitoUserPoolsTokenProvider } from '@aws-amplify/auth/cognito';
 import crypto from 'crypto-js';
 import { 
     CognitoIdentityProviderClient, 

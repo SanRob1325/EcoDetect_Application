@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Card, Form, InputNumber,Switch, Button, Slider, message, notification} from 'antd';
+import {Card, Form, InputNumber,Switch, Button, message} from 'antd';
 import apiService from './apiService';
 //Settings page inspiration:https://plainenglish.io/blog/how-to-build-a-user-settings-page
 //State to hold the settings for temperature,humidity,CO2 and notification preferences

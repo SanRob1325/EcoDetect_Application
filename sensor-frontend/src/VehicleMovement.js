@@ -1,7 +1,7 @@
 import React, { useState, useEffect} from 'react';
 import apiService from './apiService';
 import { Card, Row, Col, Statistic, Progress, Select, Spin, Alert} from 'antd';
-import {CarOutlined, CompassOutlined, ThunderboltOutlined, BulbOutlined} from '@ant-design/icons';
+import {CarOutlined, CompassOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import { Line } from 'react-chartjs-2';
 import 'chart.js/auto'; // Added for making sure the charts work
 

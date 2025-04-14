@@ -122,6 +122,7 @@ const AppContent = () => {
         <Layout style={{ minHeight: '100vh' }}>
         <Sider width={250} className="site-layout-background">
           <div style={{ padding: '16px', color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>
+            <img src={logo} alt="EcoDetect Logo" className='logo-top-right'></img>
             EcoDetect Home Dashboard
           </div>
           <Menu theme="dark" mode="inline" defaultSelectedKeys={['1']} style={{ height: '100%', borderRight: 0 }}>
@@ -139,7 +140,6 @@ const AppContent = () => {
           <Header style={{ background: '#fff', padding: '0 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Title level={2}>Home Climate Dashboard</Title>
             <div style={{ display: 'flex', alignItems: 'center'}}>
-            <img src={logo} alt="EcoDetect Logo" className='logo-top-right'></img>
             <Dropdown overlay={userMenu} placement="bottomRight">
               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center'}}>
                 <Avatar icon={<UserOutlined />} style={{ marginRight: '8px'}} />
