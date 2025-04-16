@@ -118,26 +118,6 @@ def verify_token(token):
         # Get the public key
         public_key = jwk.construct(key)
 
-        claims = jwt.decode(
-            token,
-            public_key.to_pem(),
-            algorithms=['RS256'],
-            options={
-                'verify_signature': True,
-                'verify_exp': True,
-                'verify_nbf': True,
-                'verify_iat': True,
-                'verify_aud': True,
-                'verify_aud': True,
-                'verify_iss': True,
-                'verify_exp': True,
-                'require_iat': True,
-                'require_nbf': True
-            },
-            audience=APP_CLIENT_ID,
-            issuer=f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}"
-        )
-        
         # Verify the signature
         message, encoded_signature = token.rsplit('.', 1)
         decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
