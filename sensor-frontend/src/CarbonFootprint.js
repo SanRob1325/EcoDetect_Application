@@ -78,7 +78,13 @@ const CarbonFootprintCard = ({ sensorData, waterFlow}) => {
     
 
     return (
-        <Card title="Carbon Footprint Impact">
+        <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>CarbonFootprint Impact</span>
+                            {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                        </div>
+                        }
+                            style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                            headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
             {loading ? (
                 <Spin size="small" />
             ) : error ? (

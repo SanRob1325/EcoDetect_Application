@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
-import { Dropdown, Layout, Menu, Typography, Avatar, message, Spin} from 'antd';
-import {UserOutlined, LogoutOutlined} from '@ant-design/icons'
+import { Dropdown, Layout, Menu, Typography, Avatar, message, Spin, Button } from 'antd';
+import { UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons'
 import './App.css';
 
 import AIAssistant from './AIAssistant';
@@ -13,21 +13,23 @@ import logo from './Icon-Only-Black.png'
 import ReportGenerator from './ReportGenerator';
 import RoomMonitor from './RoomMonitor';
 import VehicleMovement from './VehicleMovement';
+import UserGuide from './UserGuide';
+import WelcomePage from './WelcomePage';
 
 // Authentication components
 import Login from './Login';
 import Signup from './Signup';
 import ForgotPassword from './ForgotPassword';
 import ProtectedRoute from './ProtectedRoute';
-import {signOut } from './authUtils';
-import { AuthProvider,useAuth } from './AuthContext';
+import { signOut } from './authUtils';
+import { AuthProvider, useAuth } from './AuthContext';
 const { Header, Content, Sider } = Layout;
 
 const { Title } = Typography;
 
 const AppContent = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const {user, isAuthenticated, loading, logout} = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const [lastActivity, setLastActivity] = useState(Date.now());
 
   useEffect(() => {
@@ -37,10 +39,10 @@ const AppContent = () => {
   }, [loading]);
 
   useEffect(() => {
-    console.log('Auth stat in AppContent:', {isAuthenticated, loading, user});
+    console.log('Auth stat in AppContent:', { isAuthenticated, loading, user });
   }, [isAuthenticated, loading, user])
 
-  useEffect (() => {
+  useEffect(() => {
     if (!isAuthenticated) return;
 
     const activityEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
@@ -59,7 +61,7 @@ const AppContent = () => {
       const inactiveTime = Date.now() - lastActivity;
       const inactiveTimeout = 30 * 60 * 1000; // For 30 minutes
 
-      if (inactiveTime > inactiveTimeout){
+      if (inactiveTime > inactiveTimeout) {
         handleLogout(true);
       }
     }, 60000); // check every minute
@@ -74,44 +76,59 @@ const AppContent = () => {
   }, [isAuthenticated, lastActivity]);
 
   const handleLogout = async (isAutoLogout = false) => {
-    try{
+    try {
       await signOut();
       logout()
 
       if (isAutoLogout) {
         message.info('You have been logged out because of inactivity, please login again')
       }
-    } catch (error){
+    } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
+
+  const navigationMenu = (
+    <Menu style={{ width: '250px', padding: '8px 0', borderRadius: '4px', boxShadow: '0 3px 6px rgba(0,0,0,0.16), 0 3px rgba(0,0,0,0.23)', background: '#388E3C'}}>
+      <Menu.Item key="1"><Link to="/welcome">Welcome</Link></Menu.Item>
+      <Menu.Item key="2"><Link to="/dashboard">Dashboard</Link></Menu.Item>
+      <Menu.Item key="3"><Link to="/guide">User Guide</Link></Menu.Item>
+      <Menu.Item key="4"><Link to="/ai-assistant">AI Assistant Predictive Analysis</Link></Menu.Item>
+      <Menu.Item key="5"><Link to="/notice-board">Notice Board</Link></Menu.Item>
+      <Menu.Item key="6"><Link to="/alerts">Alerts</Link></Menu.Item>
+      <Menu.Item key="7"><Link to="/settings">Settings</Link></Menu.Item>
+      <Menu.Item key="8"><Link to="/reports">Reports</Link></Menu.Item>
+      <Menu.Item key="9"><Link to="/rooms">Room Monitoring</Link></Menu.Item>
+      <Menu.Item key="10"><Link to="/vehicle">Vehicle Monitoring</Link></Menu.Item>
+    </Menu>
+  )
   const userMenu = (
-    <Menu>
-      <Menu.Item key="profile" icon={<UserOutlined />}>
-        <Link to="/settings">Profile</Link>
+    <Menu style={{width: '200px', padding: '8px 0', borderRadius: '4px', boxShadow: '0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23)', background: '#4CAF50'}}>
+      <Menu.Item key="profile" icon={<UserOutlined style={{ color: 'white'}} />}>
+        <Link to="/settings" style={{ color: 'white' }}>Profile</Link>
       </Menu.Item>
-      <Menu.Divider />
-      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={() => handleLogout()}>
+      <Menu.Divider style={{ borderColor: 'rgba(255,255,255,0.2)'}} />
+      <Menu.Item key="logout" icon={<LogoutOutlined style={{ color: 'white' }}/>} onClick={() => handleLogout()}>
         Logout
       </Menu.Item>
     </Menu>
   );
 
   // If its still loading it should only show this spinner
-  if (isLoading){
-    return(
-      <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <Spin size="large" />
       </div>
     )
   }
 
   // If not authenticated show the auth routes
-  
+
   return (
     <Router>
-       {!isAuthenticated ? (
+      {!isAuthenticated ? (
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -120,89 +137,92 @@ const AppContent = () => {
         </Routes>
       ) : (
         <Layout style={{ minHeight: '100vh' }}>
-        <Sider width={250} className="site-layout-background">
-          <div style={{ padding: '16px', color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>
-            <img src={logo} alt="EcoDetect Logo" className='logo-top-right'></img>
-            EcoDetect Home Dashboard
-          </div>
-          <Menu theme="dark" mode="inline" defaultSelectedKeys={['1']} style={{ height: '100%', borderRight: 0 }}>
-            <Menu.Item key="1"><Link to="/">Dashboard</Link></Menu.Item>
-            <Menu.Item key="2"><Link to="/ai-assistant">AI Assistant Predictive Analysis</Link></Menu.Item>
-            <Menu.Item key="3"><Link to="/notice-board">Notice Board</Link></Menu.Item>
-            <Menu.Item key="4"><Link to="/alerts">Alerts</Link></Menu.Item>
-            <Menu.Item key="5"><Link to="/settings">Settings</Link></Menu.Item>
-            <Menu.Item key="6"><Link to="/reports">Reports</Link></Menu.Item>
-            <Menu.Item key="7"><Link to="/rooms">Room Monitoring</Link></Menu.Item>
-            <Menu.Item key="8"><Link to="/vehicle">Vehicle Monitoring</Link></Menu.Item>
-          </Menu>
-        </Sider>
-        <Layout>
-          <Header style={{ background: '#fff', padding: '0 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Title level={2}>Home Climate Dashboard</Title>
-            <div style={{ display: 'flex', alignItems: 'center'}}>
-            <Dropdown overlay={userMenu} placement="bottomRight">
-              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center'}}>
-                <Avatar icon={<UserOutlined />} style={{ marginRight: '8px'}} />
-                <span>{user?.attributes?.name || user?.username || 'User'}</span>
-              </div>
-            </Dropdown>
+          <Header style={{ background: 'linear-gradient(to right, #2E7D32, #81C784)', padding: '0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' , boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)', color: 'white'}}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Dropdown overlay={navigationMenu} trigger={['click']} placement="bottomLeft">
+                <Button type="text" icon={<MenuOutlined style={{ fontSize: '20px', color: 'white' }} />} style={{marginRight: '8px'}} />
+              </Dropdown>
+              <span style={{ marginLeft: '8px', fontWeight: 'bold', fontSize: '18px', color: '#E8F5E9', textShadow: '1px 1px 2px rgba(0,0,0,0.2)'}}>EcoDetect</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src={logo} alt="EcoDetect Logo" style={{ height: '40px', marginRight: '10px', filter: 'drop-shadow(1px 1px 3px rgba(0,0,0,0.2))' }}></img>
+              <Title level={2} style={{ margin: 0, color: 'white', textShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}>Home Climate Dashboard</Title>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Dropdown overlay={userMenu} placement="bottomRight">
+                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: '20px', transition: 'all 0.3s ease' }}>
+                  <Avatar icon={<UserOutlined />} style={{ marginRight: '8px', backgroundColor: '#1B5E20' }} />
+                  <span>{user?.attributes?.name || user?.username || 'User'}</span>
+                </div>
+              </Dropdown>
             </div>
           </Header>
-          <Content style={{ margin: '16px', padding: '24px', background: '#fff' }}>
+          <Content style={{ margin: '16px', padding: '24px', background: '#F1F8E9', borderRadius: '8px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
             <Routes>
-              <Route path="/" element={
+              <Route path="/welcome" element={
+                <ProtectedRoute>
+                  <WelcomePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/guide" element={
+                <ProtectedRoute>
+                  <UserGuide />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />
                 </ProtectedRoute>
-                } />
+              } />
               <Route path="/ai-assistant" element={
                 <ProtectedRoute>
                   <AIAssistant />
                 </ProtectedRoute>
-                } />
+              } />
               <Route path="/notice-board" element={
                 <ProtectedRoute>
                   <NoticeBoard />
                 </ProtectedRoute>
-               } />
+              } />
               <Route path="/alerts" element={
                 <ProtectedRoute>
                   <Alerts />
                 </ProtectedRoute>
-                } />
+              } />
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <SettingsPage />
                 </ProtectedRoute>
-                } />
+              } />
               <Route path="/reports" element={
                 <ProtectedRoute>
                   <ReportGenerator />
                 </ProtectedRoute>
-                } />
+              } />
               <Route path="/rooms" element={
                 <ProtectedRoute>
                   <RoomMonitor />
                 </ProtectedRoute>
-                
-                } />
+
+              } />
               <Route path="/vehicle" element={
                 <ProtectedRoute>
                   <VehicleMovement />
                 </ProtectedRoute>
-                } />
+              } />
 
               {/* Redirecting to any other routes to the dashboard*/}
-              <Route path="/*" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<Navigate to="/welcome" replace />} />
             </Routes>
           </Content>
         </Layout>
-      </Layout>
       )}
-    </Router>
+    </Router >
   )
 }
-    //Navigation for the different pages
+//Navigation for the different pages
 
 const App = () => {
   return (
@@ -211,5 +231,5 @@ const App = () => {
     </AuthProvider>
   )
 }
- 
+
 export default App;

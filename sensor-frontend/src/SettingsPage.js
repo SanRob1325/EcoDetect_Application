@@ -1,5 +1,6 @@
-import React, {useEffect, useState} from 'react';
-import {Card, Form, InputNumber,Switch, Button, message} from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Card, Form, InputNumber, Switch, Button, message, Divider } from 'antd';
+import { SettingOutlined, SaveOutlined } from '@ant-design/icons';
 import apiService from './apiService';
 //Settings page inspiration:https://plainenglish.io/blog/how-to-build-a-user-settings-page
 //State to hold the settings for temperature,humidity,CO2 and notification preferences
@@ -10,13 +11,13 @@ const SettingsPage = () => {
 
     useEffect(() => {
         const fetchSettings = async () => {
-            try{
+            try {
                 setLoading(true);
                 // Fetch thresholds
                 const thresholdResponse = await apiService.getThresholds();
                 // Fetch notification preferences
                 const prefsResponse = await apiService.getNotificationPreferences();
-                
+
                 // Set form values based on API response
                 form.setFieldsValue({
                     temperature: {
@@ -28,7 +29,7 @@ const SettingsPage = () => {
                         high: thresholdResponse.data.humidity_range[1]
                     },
                     water: {
-                        threshold: thresholdResponse.data.flow_rate_threshold || 10   
+                        threshold: thresholdResponse.data.flow_rate_threshold || 10
                     },
                     notificationPreferences: {
                         email: prefsResponse.data.email_enabled,
@@ -36,7 +37,7 @@ const SettingsPage = () => {
                         criticalOnly: prefsResponse.data.critical_only
                     }
                 });
-            } catch (error){
+            } catch (error) {
                 console.error('Error fetching settings:', error);
                 message.error('Failed to load settings');
             } finally {
@@ -48,11 +49,11 @@ const SettingsPage = () => {
     }, [form]);
 
     const onFinish = async (values) => {
-        try{
+        try {
             setLoading(true);
 
             // Update thresholds
-            await apiService.setThresholds( {
+            await apiService.setThresholds({
                 temperature_range: [values.temperature.low, values.temperature.high],
                 humidity_range: [values.humidity.low, values.humidity.high],
                 flow_rate_threshold: values.water.threshold
@@ -66,55 +67,103 @@ const SettingsPage = () => {
             })
 
             message.success('Settings updated successfully');
-        }catch (error){
+        } catch (error) {
             console.error('Error updating settings:', error);
             message.error('Failed to update settings')
         } finally {
             setLoading(false);
         }
     };
-    return(
-        <Card title="Settings" style={{margin: '16px'}} loading={loading}>
+    return (
+        <Card title={
+            <div style={{ color: 'white', display: 'flex', alignItems: 'center' }}>
+                <SettingOutlined style={{ marginRight: '8px' }} />
+                <span>Settings</span>
+            </div>
+        }
+            style={{
+                margin: '16px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                backgroundColor: '#F1F8E9'
+            }}
+            headStyle={{
+                backgroundColor: '#388E3C',
+                color: 'white',
+                borderTopLeftRadius: '8px',
+                borderTopRightRadius: '8px'
+            }}
+            loading={loading}
+        >
             {/*Form with initial values to set the current settings*/}
             <Form
                 form={form}
                 layout='vertical'
                 onFinish={onFinish}
             >
-                <h3>Temperature Thresholds</h3>
-                <Form.Item label="Low Threshold (C)" name={['temperature', 'low']}>
-                    <InputNumber min={-50} max={50} />
+                <Divider orientation='left' style={{ color: '#388E3C', borderColor: '#AED581', fontWeight: 'bold' }}>
+                    Temperature Thresholds
+                </Divider>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <Form.Item label="Low Threshold (C)" name={['temperature', 'low']} style={{ flex: 1, minWidth: '200px' }}>
+                        <InputNumber min={-50} max={50} style={{ width: '100%' }} controls={{ upIcon: null, downIcon: null }} />
+                    </Form.Item>
+                    <Form.Item label="High Threshold (C)" name={['temperature', 'high']} style={{ flex: 1, minWidth: '200px' }}>
+                        <InputNumber min={-50} max={50} style={{ width: '100%' }} controls={{ upIcon: null, downIcon: null }} />
+                    </Form.Item>
+                </div>
+                <Divider orientation="left" style={{ color: '#388E3C', borderColor: '#AED581', fontWeight: 'bold' }}>
+                    Humidity Thresholds
+                </Divider>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}></div>
+                <Form.Item label="Low Threshold (%)" name={['humidity', 'low']} style={{ flex: 1, minWidth: '200px' }}>
+                    <InputNumber min={0} max={100} style={{ width: '100%' }} controls={{ upIcon: null, downIcon: null }} />
                 </Form.Item>
-                <Form.Item label="High Threshold (C)" name={['temperature', 'high']}>
-                    <InputNumber min={-50} max={50} />
+                <Form.Item label="High Threshold (%)" name={['humidity', 'high']} style={{ flex: 1, minWidth: '200px' }}>
+                    <InputNumber min={0} max={100} style={{ width: '100%' }} controls={{ upIcon: null, downIcon: null }} />
                 </Form.Item>
 
-                <h3>Humidity Thresholds</h3>
-                <Form.Item label="Low Threshold (%)" name={['humidity', 'low']}>
-                    <InputNumber min={0} max={100} />
-                </Form.Item>
-                <Form.Item label="High Threshold (%)" name={['humidity', 'high']}>
-                    <InputNumber min={0} max={100} />
-                </Form.Item>
-                
-                <h3>Water Usage Threshold</h3>
+                <Divider orientation="left" style={{ color: '#388E3C', borderColor: '#AED581', fontWeight: 'bold' }}>Water Usage Threshold</Divider>
                 <Form.Item label="Maximum Flow Rate (L/min)" name={['water', 'threshold']}>
-                    <InputNumber min={0} max={20} />
+                    <InputNumber min={0} max={20} style={{ width: '100%', maxWidth: '300px' }} controls={{ upIcon: null, downIcon: null }} />
                 </Form.Item>
 
-                <h3>Notification Preferences</h3>
-                <Form.Item label="Email Notifications" name={['notificationPreferences', 'email']} valuePropName='checked'>
-                    <Switch />
-                </Form.Item>
-                <Form.Item label="SMS Notifications" name={['notificationPreferences', 'sms']} valuePropName='checked'>
-                    <Switch />
-                </Form.Item>
-                <Form.Item name={['notificationPreferences', 'criticalOnly']} valuePropName='checked' label="Critical Alerts Only">
-                    <Switch />
-                </Form.Item>
+                <Divider orientation="left" style={{ color: '#388E3C', borderColor: '#AED581', fontWeight: 'bold' }}>
+                    Notification Preferences
+                </Divider>
+                <div style={{
+                    background: 'white',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    marginBottom: '16px'
+                }}>
+                    <Form.Item label="Email Notifications" name={['notificationPreferences', 'email']} valuePropName='checked' style={{ marginBottom: '12px' }}>
+                        <Switch
+                            checkedChildren="On"
+                            unCheckedChildren="Off"
+                            style={{ backgroundColor: '#4CAF50' }}
+                        />
+                    </Form.Item>
+                    <Form.Item label="SMS Notifications" name={['notificationPreferences', 'sms']} valuePropName='checked' style={{ marginBottom: '12px' }}>
+                        <Switch
+                            checkedChildren="On"
+                            unCheckedChildren="Off"
+                            style={{ backgroundColor: '#4CAF50' }}
+                        />
+                    </Form.Item>
+                    <Form.Item name={['notificationPreferences', 'criticalOnly']} valuePropName='checked' label="Critical Alerts Only">
+                        <Switch
+                            checkedChildren="On"
+                            unCheckedChildren="Off"
+                            style={{ backgroundColor: '#4CAF50' }}
+                        />
+                    </Form.Item>
+                </div>
 
                 <Form.Item>
-                    <Button type="primary" htmlType='submit'>
+                    <Button type="primary" htmlType='submit' icon={<SaveOutlined />} style={{ backgroundColor: '#4CAF50', borderColor: '#388E3C', height: '40px', borderRadius: '4px' }}
+                        loading={loading}
+                    >
                         Save Settings
                     </Button>
                 </Form.Item>

@@ -1,31 +1,31 @@
-import React, { useEffect, useState } from 'react'; 
+import React, { useEffect, useState } from 'react';
 import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://antoniolago.github.io/react-gauge-component/ and https://www.npmjs.com/package/react-gauge-chart
 import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar, Checkbox } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
 import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
 import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
-import {notification, Badge, List, Typography} from 'antd';
+import { notification, Badge, List, Typography } from 'antd';
 import Alerts from './Alerts';
 import CarbonFootprintCard from './CarbonFootprint';
 import ReportCard from './ReportCard';
 import apiService from './apiService';
-const {Text} = Typography
+const { Text } = Typography
 
 const { Option } = Select;
 //Stores sensor data such as temperature,humidity,water usage and CO2 leves
 const Dashboard = () => {
-    const [data, setData] = useState({ 
+    const [data, setData] = useState({
         temperature: null,
         humidity: null,
         waterUsage: null,
         co2: null,
         pressure: null,
         altitude: null,
-        imu: { 
-            acceleration: [0,0,0],
-            gyroscope: [0,0,0],
-            magnetometer: [0,0,0],
+        imu: {
+            acceleration: [0, 0, 0],
+            gyroscope: [0, 0, 0],
+            magnetometer: [0, 0, 0],
         },
-     });
+    });
     const [alerts, setAlerts] = useState([])
     const [waterFlow, setWaterFlow] = useState(null);
     const [waterUnit, setWaterUnit] = useState("L/min");
@@ -46,7 +46,7 @@ const Dashboard = () => {
     const [userInput, setUserInput] = useState('')
 
     const CPU_TEMPERATURE_OFFSET = 5; //Normalise CPU temperature to reduce noise in the temperature value
-    
+
     const [notificationPrefs, setNotificationPrefs] = useState({
         sms_enabled: true,
         email_enabled: true,
@@ -59,13 +59,13 @@ const Dashboard = () => {
      * Reference within Requirements documentation
      */
     useEffect(() => {
-        const fetchAlerts = async() => {
-            try{
+        const fetchAlerts = async () => {
+            try {
                 const response = await apiService.getAlerts()
                 setAlerts(response.data)
 
                 // Show notification for the most recent alert if its new
-                if (response.data.length > 0 && alerts.length === 0){
+                if (response.data.length > 0 && alerts.length === 0) {
                     const latestAlert = response.data[0];
                     notification.warning({
                         message: 'Threshold Alert',
@@ -73,7 +73,7 @@ const Dashboard = () => {
                         duration: 5
                     })
                 }
-            }catch (error){
+            } catch (error) {
                 console.error('Error fetching alerts:', error)
             }
         }
@@ -86,10 +86,10 @@ const Dashboard = () => {
 
     useEffect(() => {
         const fetchNotificationPrefs = async () => {
-            try{
+            try {
                 const response = await apiService.getNotificationPreferences()
                 setNotificationPrefs(response.data);
-            } catch (error){
+            } catch (error) {
                 console.error('Error fetching notification preferences:', error)
             }
         }
@@ -98,12 +98,12 @@ const Dashboard = () => {
     }, [])
 
     useEffect(() => {
-        const fetchWaterFlowData = async() => {
-            try{
+        const fetchWaterFlowData = async () => {
+            try {
                 const response = await apiService.getWaterUsage()
                 setWaterFlow(response.data.flow_rate);
                 setWaterUnit(response.data.unit);
-            } catch (error){
+            } catch (error) {
                 console.error('Error fetching water usage:', error)
             }
         };
@@ -111,7 +111,7 @@ const Dashboard = () => {
         const interval = setInterval(fetchWaterFlowData, 5000);
         return () => clearInterval(interval);
     }, [])
-    
+
     const normaliseTemperature = (temperature) => {
         if (temperature === null) return null;
         return temperature - CPU_TEMPERATURE_OFFSET;
@@ -140,9 +140,9 @@ const Dashboard = () => {
         return () => clearInterval(interval);
     }, []);
 
-        
 
-//fetches ranges for co2 and temperature  References:https://blog.logrocket.com/understanding-axios-get-requests/
+
+    //fetches ranges for co2 and temperature  References:https://blog.logrocket.com/understanding-axios-get-requests/
     useEffect(() => {
         const fetchCo2Trends = async () => {
             try {
@@ -197,22 +197,22 @@ const Dashboard = () => {
     };
 
     const updateNotificationPrefs = async () => {
-        try{
+        try {
             await apiService.setNotificationPreferences(notificationPrefs);
             alert('Notigication preferences updated successfully')
-        }catch (error) {
-            console.error('Error updating notification preferences:',error)
+        } catch (error) {
+            console.error('Error updating notification preferences:', error)
         }
     }
 
-//caluclation of threshold ranges for temperature and humidity
+    //caluclation of threshold ranges for temperature and humidity
     const tempValue = data.temperature !== null
         ? Math.min(Math.max((data.temperature - thresholds.temperature_range[0]) / (thresholds.temperature_range[1] - thresholds.temperature_range[0]), 0), 1)
         : 0;
     const humValue = data.humidity !== null
         ? Math.min(Math.max((data.humidity / thresholds.humidity_range[0]) / (thresholds.humidity_range[1] - thresholds.humidity_range[0]), 0), 1)
         : 0;
-//Calculates the displayed CO2 value Reference:
+    //Calculates the displayed CO2 value Reference:
     const co2Gradient = (value) => {
         const percentage = Math.min((value / 1000) * 100, 100);
 
@@ -220,28 +220,28 @@ const Dashboard = () => {
     };
     //Not working yet but this track chat history of submitted queries
     const handleSendMessage = async (message = userInput) => {
-        message =String(message)
+        message = String(message)
         if (!message.trim()) return;
 
         setChatHistory(prev => [
-            ...prev, 
-            { sender: 'user', message: message.trim()}, 
-            {sender: 'bot', message: 'Typing...'}]);
+            ...prev,
+            { sender: 'user', message: message.trim() },
+            { sender: 'bot', message: 'Typing...' }]);
 
         setLoadingAI(true);
-        
-        try{
+
+        try {
             const { data } = await apiService.queryAIAssistant(message.trim());
             //Update chat history with AI response
             setChatHistory(prev => [
                 ...prev.slice(0, -1),
-                { sender: 'bot', message: data.answer || "No response generated"}
+                { sender: 'bot', message: data.answer || "No response generated" }
             ]);
-        } catch (error){
+        } catch (error) {
             console.error('Error communicating with AI assistant:', error);
             setChatHistory(prev => [
                 ...prev.slice(0, -1),
-                { sender: 'bot', message: "Apologies, unable to process an answer for you request, please try again"}
+                { sender: 'bot', message: "Apologies, unable to process an answer for you request, please try again" }
             ]);
         } finally {
             setUserInput('');
@@ -256,35 +256,61 @@ const Dashboard = () => {
 
     return ( //styling and structure for gauges,progress bars,and CO2 gradient percentage referenced above.This also is the sytling and customisation for the user preferences fo the range of temperature data
         <>
-            {loading && <Spin size="large" />}
-            <div style={{ display: 'flex', justifyContent: 'space-around', gap: '20px' }}>
-                <Card title="Temperature">
-                    <p style={{fontSize: '12px',color: 'gray'}}>
+            <div style={{
+                display: 'flex', justifyContent: 'space-around', gap: '20px'
+            }}>
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Temperature</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <p style={{ fontSize: '12px', color: '#666' }}>
                         Monitors room temperature to optimize heating/cooling systems and reduce energy use and carbon footprint
                     </p>
-                    <GaugeChart id="temperature-gauge" nrOfLevels={20} percent={tempValue} needleBaseColor="red" needleColor='red' />
+                    <GaugeChart id="temperature-gauge" nrOfLevels={20} percent={tempValue} needleBaseColor="red" needleColor='red' colors={['#C8E6C9', '#81C784', '#4CAF50']} />
                     <p>{data.temperature !== null && data.temperature !== undefined ? `${data.temperature.toFixed(2)}°C` : 'Loading...'}</p>
                 </Card>
-                <Card title="Humidity">
-                    <p style={{fontSize: '12px', color:'gray'}}>
-                        Measures humidity to maintain optimal levels of storage greenhouse environments reducing waste
-                    </p>
-                    <GaugeChart id="humidity-gauge" nrOfLevels={20} percent={humValue} needleBaseColor="blue" needleColor="blue" />
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Humidity</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <GaugeChart id="humidity-gauge" nrOfLevels={20} percent={humValue} needleBaseColor="blue" needleColor="blue" colors={['#C8E6C9', '#81C784', '#4CAF50']}/>
                     <p>{data.humidity !== null && data.humidity !== undefined ? `${data.humidity.toFixed(2)}%` : 'Loading...'}</p>
                 </Card>
-                <Card title="Barometric Pressure">
-                <p style={{ fontSize: '12px', color: 'gray'}}>
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Barometric Pressure</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <p style={{ fontSize: '12px', color: 'gray' }}>
                         Provides weather insights and helps scheduling operations efficiently, reducing eneccessary energy usage
                     </p>
                     <Progress
                         percent={data.pressure !== null && data.pressure !== undefined ? Math.min((data.pressure / 1100) * 100, 100) : 0} // Max 1100 hPa
-                        status = "active"
-                        showInfo ={true}
+                        status="active"
+                        showInfo={true}
+                        strokeColor={{
+                            '0%': '#AED581',
+                            '100%': '#4CAF50',
+                        }}
                     />
                     <p>{data.pressure !== null && data.pressure !== undefined ? `${data.pressure.toFixed(2)} hPa` : 'Loading..'}</p>
                 </Card>
-                <Card title="Altitude">
-                    <p style={{ fontSize: '12px', color: 'gray'}}>
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Altitude</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <p style={{ fontSize: '12px', color: 'gray' }}>
                         Tracks changes to elevation, which can impact energy consumption for machiner and transport, inirectly influencing emissions
                     </p>
                     <Progress
@@ -294,54 +320,66 @@ const Dashboard = () => {
                     />
                     <p>{data.altitude !== null && data.altitude !== undefined ? `${data.altitude.toFixed(2)} m` : 'Loading..'}</p>
                 </Card>
-                <Card title="IMU Data">
-                    <p style={{ fontsize: '12px', color: 'gray'}}>
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>IMU Data</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <p style={{ fontsize: '12px', color: 'gray' }}>
                         Measures equipment usage and driving behaviou and asset tracking to improve operation efficiency and reduce carbon footprint
                     </p>
                     <p>Acceleration (m/s²)</p>
-                    <Progress 
-                        percent={data.imu && data.imu.acceleration && data.imu.acceleration[0] !== undefined ? Math.min(Math.abs(data.imu.acceleration[0]), 100) :0 }
+                    <Progress
+                        percent={data.imu && data.imu.acceleration && data.imu.acceleration[0] !== undefined ? Math.min(Math.abs(data.imu.acceleration[0]), 100) : 0}
                         status="active"
                         showInfo={true}
                     />
                     <p>Gyroscope (°/s):</p>
                     <Progress
-                        percent={data.imu && data.imu.gyroscope && data.imu.gyroscope[0] !== undefined ? Math.min(Math.abs(data.imu.gyroscope[0]), 100) :0}
+                        percent={data.imu && data.imu.gyroscope && data.imu.gyroscope[0] !== undefined ? Math.min(Math.abs(data.imu.gyroscope[0]), 100) : 0}
                         status="active"
                         showInfo={true}
                     />
                     <p>Magnetometer (μT):</p>
                     <Progress
-                        percent={data.imu && data.imu.magnetometer && data.imu.magnetometer[0] !== undefined ? Math.min(Math.abs(data.imu.magnetometer[0]), 100) :0}
+                        percent={data.imu && data.imu.magnetometer && data.imu.magnetometer[0] !== undefined ? Math.min(Math.abs(data.imu.magnetometer[0]), 100) : 0}
                         status="active"
                         showInfo={true}
                     />
                 </Card>
-                <Card title="Water Usage">
-                    <p style={{fontSize: '12px', color: 'gray'}}>
+                <Card title={<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Water Usage</span>
+                    {loading && <Spin size="small" style={{ opacity: 0.6 }} />}
+                </div>
+                }
+                    style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1', backgroundColor: '#F1F8E9' }}
+                    headStyle={{ backgroundColor: '#388E2C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    <p style={{ fontSize: '12px', color: 'gray' }}>
                         Monitors water consumption in real time
                     </p>
                     <Progress
-                        percent={waterFlow !== null ? Math.min((waterFlow / 10) * 100, 100) :0}
+                        percent={waterFlow !== null ? Math.min((waterFlow / 10) * 100, 100) : 0}
                         status="active"
                         showInfo={true}
                     />
                     <p>{waterFlow !== null ? `${waterFlow.toFixed(2)} ${waterUnit}` : 'Loading...'}</p>
                     {thresholds.flow_rate_threshold && (
-                        <p style={{ color: waterFlow > thresholds.flow_rate_threshold ? 'red': 'green'}}>
+                        <p style={{ color: waterFlow > thresholds.flow_rate_threshold ? 'red' : 'green' }}>
                             Threshold: {thresholds.flow_rate_threshold} {waterUnit}
                         </p>
                     )}
                 </Card>
-                <CarbonFootprintCard sensorData={data} waterFlow={waterFlow}/>
-                <ReportCard />
+                <CarbonFootprintCard sensorData={data} waterFlow={waterFlow} />
+                <ReportCard style={{ margin: 0}}/>
             </div>
             {/*Chatbot opens */}
             <Button
                 type="primary"
                 shape="circle"
                 icon={<RobotOutlined />}
-                style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1000, backgroundColor: '#1890ff', color: '#fff' }}
+                style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1000, backgroundColor: '#1890ff', color: '#fff', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', border: 'none' }}
                 onClick={() => setIsChatbotVisible(true)}
             />
             {/*Chatbot Modal*/}
@@ -350,35 +388,40 @@ const Dashboard = () => {
                 title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Avatar src={chatbotIcon} alt="Chatbot Icon" />
-                        <span>AI Chatbot</span>
+                        <span style={{ color: '#388E2C', fontweight: 'bold' }}>EcoBot AI Chatbot</span>
                     </div>
                 }
                 open={isChatbotVisible}
                 onCancel={() => setIsChatbotVisible(false)}
                 footer={null}
                 width={400}
+                bodyStyle={{ backgroundColor: '#F1F8E9' }}
+                style={{ top: 20 }}
             >
-                <div style={{ height: '300px', overflowY: 'auto', marginBottom: '10px', padding: '5px', border: '1px solid #d9d9d9', borderRadius: '10px'}}>
+                <div style={{ height: '300px', overflowY: 'auto', marginBottom: '10px', padding: '5px', border: '1px solid #d9d9d9', borderRadius: '10px' }}>
                     {/* implementation still being worked on*/}
                     {chatHistory.map((chat, index) => (
                         <div key={index} style={{
-                                textAlign: chat.sender === 'user' ? 'right' : 'left',
-                                margin: '8px 0',
-                                padding: '10px',
-                                borderRadius: '15px',
-                                backgroundColor: chat.sender === 'user' ? '#d9f7be' : '#f0f0f0',
-                                maxWidth: '80%',
-                                alignSelf: chat.sender === 'user' ? 'flex-end': 'flex-start',
-                                fontSize: '14px',
-                            }}
+                            textAlign: chat.sender === 'user' ? 'right' : 'left',
+                            margin: '8px 0',
+                            padding: '10px',
+                            borderRadius: '15px',
+                            backgroundColor: chat.sender === 'user' ? '#C8E5C9' : '#E8F5E9',
+                            maxWidth: '80%',
+                            alignSelf: chat.sender === 'user' ? 'flex-end' : 'flex-start',
+                            fontSize: '14px',
+                            display: 'inline-block',
+                            marginLeft: chat.sender === 'user' ? 'auto' : '0',
+                            marginRight: chat.sender === 'user' ? '0' : 'auto',
+                        }}
                         >
                             <div>{chat.message}</div>
-                            <span style={{ fontSize: '10px', color: 'gray'}}>{new Date().toLocaleTimeString()}</span>
+                            <span style={{ fontSize: '10px', color: 'gray' }}>{new Date().toLocaleTimeString()}</span>
                         </div>
-                    ))} 
+                    ))}
                 </div>
-                {loadingAI && <Spin style={{ display: 'block', margin: '10px auto'}} />}
-                <div style={{ display: 'flex', gap:'10px', marginBottom: '10px'}}>
+                {loadingAI && <Spin style={{ display: 'block', margin: '10px auto' }} />}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                     {["How can I reduce my carbon footprint?", "Tips for saving water", "Best eco-friendly matierals"].map((suggestion, idx) => (
                         <Button key={idx} size="small" onClick={() => handleSuggestionClick(suggestion)}>
                             {suggestion}
@@ -389,7 +432,7 @@ const Dashboard = () => {
                     placeholder='Enter you question...'
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
-                    onPressEnter={(e) =>{
+                    onPressEnter={(e) => {
                         e.preventDefault();
                         handleSendMessage();
                     }}
@@ -401,8 +444,9 @@ const Dashboard = () => {
                 />
             </Modal>
             <Alerts />
-           
-            <Card title="CO2 Trends" style={{ marginTop: '16px' }}>
+
+            <Card title="CO2 Trends" style={{ marginTop: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', backgroundColor: '#F1F8E9' }}
+                headStyle={{ backgroundColor: '#388E3C', color: 'white', borderTopLeftRadius: '8px', borderTopRighRadius: '8px' }}>
                 <div style={{ display: "flex", justifyContent: 'space-between', alignItems: 'center' }}>
                     <p>Select Range</p>
                     <Select
@@ -423,6 +467,8 @@ const Dashboard = () => {
                                 color: '#fff',
                                 width: '150px',
                                 textAlign: 'center',
+                                borderRadius: '8px',
+                                boxShadow: '0, 2px 4px rgba(0,0,0,0.1)'
                             }}
                         >
                             <p>{selectedRange === 'days' ? trend.day : trend.month}</p>
@@ -441,6 +487,12 @@ const Dashboard = () => {
                             max={40}
                             value={thresholds.temperature_range}
                             onChange={(value) => setThresholds({ ...thresholds, temperature_range: value })}
+                            railStyle={{ backgroundColor: '#C8E6C9' }}
+                            trackStyle={[{ backgroundColor: '#4CAF50' }]}
+                            handleStyle={[
+                                { borderColor: '#388E3C', backgroundColor: '#4CAF50' },
+                                { borderColor: '#388E3C', backgroundColor: '#4CAF50' }
+                            ]}
                         />
                     </div>
                     <div>
@@ -459,20 +511,20 @@ const Dashboard = () => {
                             min={0}
                             max={20}
                             value={thresholds.flow_rate_threshold}
-                            onChange={(value) => setThresholds({ ... thresholds, flow_rate_threshold: value})}
-                            />
+                            onChange={(value) => setThresholds({ ...thresholds, flow_rate_threshold: value })}
+                        />
                     </div>
                 </div>
-                <Button type="primary" onClick={updateThresholds} style={{ marginTop: '16px' }}>
+                <Button type="primary" onClick={updateThresholds} style={{ marginTop: '16px', backgroundColor: '#4CAF50', borderColor: '#388E3C', borderRadius: '4px' }}>
                     Update Thresholds
                 </Button>
             </Card>
-            <Card title="Notification Preferences" style={{marginTop: '16px'}}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px'}}>
+            <Card title="Notification Preferences" style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div>
                         <Checkbox
                             checked={notificationPrefs.sms_enabled}
-                            onChange={(e) => setNotificationPrefs({... notificationPrefs, sms_enabled: e.target.checked})}
+                            onChange={(e) => setNotificationPrefs({ ...notificationPrefs, sms_enabled: e.target.checked })}
                         >
                             Receive SMS Alerts
                         </Checkbox>
@@ -480,7 +532,7 @@ const Dashboard = () => {
                     <div>
                         <Checkbox
                             checked={notificationPrefs.email_enabled}
-                            onChange={(e) => setNotificationPrefs({...notificationPrefs, email_enabled: e.target.checked})}
+                            onChange={(e) => setNotificationPrefs({ ...notificationPrefs, email_enabled: e.target.checked })}
                         >
                             Receive Email Alerts
 
@@ -489,20 +541,20 @@ const Dashboard = () => {
                     <div>
                         <Checkbox
                             checked={notificationPrefs.critical_only}
-                            onChange={(e) => setNotificationPrefs({...notificationPrefs, critical_only: e.target.checked})}
+                            onChange={(e) => setNotificationPrefs({ ...notificationPrefs, critical_only: e.target.checked })}
                         >
                             Critical Alerts Only
                         </Checkbox>
                     </div>
                 </div>
-                <Button type="primary" onClick={updateNotificationPrefs} style={{ marginTop: '16px'}}>
+                <Button type="primary" onClick={updateNotificationPrefs} style={{ marginTop: '16px' }}>
                     Update Notification Preferences
                 </Button>
-                
-                
-            </Card>  
+
+
+            </Card>
             <Card title="Temperature Trends" style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <p>Select Range:</p>
                     <Select defaultValue="24h" onChange={(value) => setSelectedRange(value)} style={{ width: '150px' }}>
                         <Option value="24h">Last 24 Hours</Option>
@@ -521,6 +573,6 @@ const Dashboard = () => {
                 </div>
             </Card>
         </>
-    ); 
+    );
 }
 export default Dashboard;
