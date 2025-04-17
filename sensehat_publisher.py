@@ -199,37 +199,39 @@ def read_sensor_data():
         logging.error(f"Error reading sensor data: {str(e)}")
         return None
 
-try:
-    logger.info(f"Starting sensor monitoring thresholds Temp:{TEMP_THRESHOLD_LOW}-{TEMP_THRESHOLD_HIGH}C, Humidity: {HUMIDITY_THRESHOLD_LOW}-{HUMIDITY_THRESHOLD_HIGH}%")
+
+if __name__ == "__main__":
+    try:
+        logger.info(f"Starting sensor monitoring thresholds Temp:{TEMP_THRESHOLD_LOW}-{TEMP_THRESHOLD_HIGH}C, Humidity: {HUMIDITY_THRESHOLD_LOW}-{HUMIDITY_THRESHOLD_HIGH}%")
     
-    sample_count = 0
-    while True:
-        sensor_data = read_sensor_data()
-        if sensor_data:
-            exceeded_thresholds = check_thresholds(sensor_data)
+        sample_count = 0
+        while True:
+            sensor_data = read_sensor_data()
+            if sensor_data:
+                exceeded_thresholds = check_thresholds(sensor_data)
             
-            if exceeded_thresholds:
-                sensor_data['exceeded_thresholds'] = exceeded_thresholds
-                logger.warning(f"Thresholds exceeded: {', '.join(exceeded_thresholds)}")
-                
-                
-            payload = json.dumps(sensor_data)
-            mqtt_client.publish(IOT_TOPIC2, payload, 1)
-            
-            # Log details periodically to avoid excessive logging
-            sample_count += 1
-            if sample_count % 12 == 0 or exceeded_thresholds:
                 if exceeded_thresholds:
-                    logger.info(f"ALERT: Published to AWS IOT Temperature:{sensor_data['temperature']}C, Humidity:{sensor_data['humidity']}%, Thresholds:{', '.join(exceeded_thresholds)}")
-                else:
-                    logger.info(f"Published to AWS IoT: Temperature:{sensor_data['temperature']}C, Humidity: {sensor_data['humidity']}%")
-            logging.info(f"Published to AWS IoT: {payload}")    
-        time.sleep(5)
+                    sensor_data['exceeded_thresholds'] = exceeded_thresholds
+                    logger.warning(f"Thresholds exceeded: {', '.join(exceeded_thresholds)}")
+                
+                
+                payload = json.dumps(sensor_data)
+                mqtt_client.publish(IOT_TOPIC2, payload, 1)
+            
+                # Log details periodically to avoid excessive logging
+                sample_count += 1
+                if sample_count % 12 == 0 or exceeded_thresholds:
+                    if exceeded_thresholds:
+                        logger.info(f"ALERT: Published to AWS IOT Temperature:{sensor_data['temperature']}C, Humidity:{sensor_data['humidity']}%, Thresholds:{', '.join(exceeded_thresholds)}")
+                    else:
+                        logger.info(f"Published to AWS IoT: Temperature:{sensor_data['temperature']}C, Humidity: {sensor_data['humidity']}%")
+                logging.info(f"Published to AWS IoT: {payload}")    
+            time.sleep(5)
         
-except KeyboardInterrupt:
-    logging.info("Stopping publishing")
-except Exception as e:
-    logging.error(f"Unexpected error: {str(e)}")
-finally:
-    mqtt_client.disconnect()
-    logging.info("Disconnected from AWS IoT Core")
+    except KeyboardInterrupt:
+        logging.info("Stopping publishing")
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}")
+    finally:
+        mqtt_client.disconnect()
+        logging.info("Disconnected from AWS IoT Core")

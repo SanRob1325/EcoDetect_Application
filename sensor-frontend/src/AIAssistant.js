@@ -74,7 +74,9 @@ const AIAssistant = () => {
         try {
             await fetchPredictiveData();
             const response = await apiService.queryAIAssistant({
-                query: `Provide redictive analysis: ${userQuery}`,
+                query: userQuery,
+                user_id: "frontend-user",
+                location: "Web Dashboard"
             })
             setAiResponse(response.data.answer); //Sets AI response
         } catch (error) {

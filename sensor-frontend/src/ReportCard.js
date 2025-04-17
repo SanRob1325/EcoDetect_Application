@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 const {Title, Paragraph} = Typography;
 const {Option} = Select;
 
-const ReportCard = () => {
+const ReportCard = ({style = {}}) => {
     const [quickReportVisible, setQuickReportVisible] = useState(false);
     const [timeRange, setTimeRange] = useState('daily');
     const navigate = useNavigate();
@@ -38,24 +38,31 @@ const ReportCard = () => {
     return(
         <Card
             title="Environmental Reports"
-            onDragExitCapture={
+            extra={
                 <Tag color="green">
                     <LineChartOutlined /> Data Analysis
                 </Tag>
             }
-            style={{margin: '16px'}}
+            style={{ borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', backgroundColor: '#F1F8E9', ...style}}
+            headStyle={{backgroundColor: '#388E3C', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px'}}
         >
-            <Paragraph>
+            <Paragraph style={{ color: '#333'}}>
                 Generate detailed reports on your environmental data to track trends,
                 identify anomalies, and make informed decisions to reduce your carbon footprint
             </Paragraph>
 
-            <Space direction="vertical" style={{width: '100%'}}>
+            <Space direction="vertical" style={{width: '100%', marginTop: '16px'}}>
                 <Button
                     type="primary"
                     icon={<FileTextOutlined />}
                     onClick={goToReportGenerator}
                     block
+                    style={{
+                        backgroundColor: '#4CAF50',
+                        borderColor: '#388E3C',
+                        height: '40px',
+                        borderRadius: '4px'
+                    }}
                 >
                     Advanced Report Generator
                 </Button>
@@ -63,29 +70,45 @@ const ReportCard = () => {
                     icon={<DownloadOutlined />}
                     onClick={showQuickReport}
                     block
+                    style={{
+                        borderColor: '#4CAF50',
+                        color: '#388E3C',
+                        height: '40px',
+                        borderRadius: '4px'
+                    }}
                 >
                     Quick Report
                 </Button>
             </Space>
 
             <Modal
-                title="Generate Quick Report"
+                title={
+                    <div style={{ color: '#388E3C', fontWeight: 'bold'}}>
+                        Generate Quick Report
+                    </div>
+                }
                 open={quickReportVisible}
                 onOk={handleQuickReport}
                 onCancel={() => setQuickReportVisible(false)}
+                okButtonProps={{
+                    style: { backgroundColor: '#4CAF50', borderColor: '#388E3C'}
+                }}
+                bodyStyle={{ backgroundColor: '#F1F8E9'}}
+                style={{ top: 20}}
             >
                 <Paragraph>
                     Generate a quick report with common environmental metrics,
                     This report will include temperature,humidity, and water usage data.
                 </Paragraph>
                 <div style={{marginBottom: 16}}>
-                    <Title level={5}>Time Range:</Title>
+                    <Title level={5} style={{ color: '#388E3C' }}>Time Range:</Title>
                     <Select
                         defaultValue="daily"
                         style={{width: '100%'}}
                         onChange={(value) => setTimeRange(value)}
+                        dropdownStyle={{ backgroundColor: '#F1F8E9'}}
                     >
-                        <Option value="daily">Daily (LAst 24 hours)</Option>
+                        <Option value="daily">Daily (Last 24 hours)</Option>
                         <Option value="weekly">Weekly (Last 7 days)</Option>
                         <Option value="monthly">Monthly (Last 30 days)</Option>
                     </Select>

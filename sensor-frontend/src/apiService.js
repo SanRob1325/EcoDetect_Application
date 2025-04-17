@@ -107,7 +107,7 @@ const apiService = {
     setNotificationPreferences: (preferences) => api.post('/api/notification-preferences', preferences),
 
     // AI assistant
-    queryAIAssistant: (query) => api.post('/api/ai-assistant', { query }),
+    queryAIAssistant: (payload) => api.post('/api/ai-assistant', payload),
 
     // Predictive analysis
     getPredictiveAnalysis: (dataType = 'temperature', days = 7) =>
