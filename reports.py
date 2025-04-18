@@ -714,95 +714,277 @@ def generate_report():
             "message": f"An error occurred: {str(e)}"
         }), 500
         
+
 def generate_pdf_report(report_data):
     """Generate more comprehensive report"""
     try:
         from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
         from reportlab.lib.units import inch
+        from reportlab.platypus import TableStyle
         
+        # Eco friendly colors
+        eco_dark_green = colors.Color(0.13, 0.55, 0.13) # Dark Green
+        eco_light_green = colors.Color(0.56, 0.93, 0.56) # Light green
+        eco_blue = colors.Color(0.12, 0.47, 0.71) # Water like blue
+        eco_earth = colors.Color(0.55, 0.34, 0.17) # brown
+
+
         # Create PDF in memory
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer,pagesize=letter,
-                                rightMargin=72, leftMargin=72,
-                                topMargin=72, bottomMArgin=18)
+                                rightMargin=0.5*inch, leftMargin=0.5*inch,
+                                topMargin=0.5*inch, bottomMargin=0.5*inch)
         
         # Styling
         styles = getSampleStyleSheet()
         
+        # Custom Title style with green
+        title_style = ParagraphStyle(
+            'EcoTitle',
+            parent=styles['Title'],
+            textColor=eco_dark_green,
+            fontSize=24,
+            spaceAfter=16
+        )
+
+        heading1_style = ParagraphStyle(
+            'EcoHeading1',
+            parent=styles['Heading1'],
+            textColor=eco_dark_green,
+            fontSize=18,
+            spaceAfter=10
+        )
+
+        heading2_style = ParagraphStyle(
+            'EcoHeading2',
+            parent=styles['Heading2'],
+            textColor=eco_blue,
+            fontSize=16,
+            spaceAfter=8
+        )
+
+        # Normal text style
+        normal_style = ParagraphStyle(
+            'EcoNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14
+        )
+
+        # Info text style
+        info_style = ParagraphStyle(
+            'EcoInfo',
+            parent=styles['Italic'],
+            textColor=eco_blue,
+            fontSize=9
+        )
+
         # Collect content
         story = []
         #Title
-        story.append(Paragraph("Environmental Data Report", styles['Title']))
-        story.append(Spacer(1, 12))
+        story.append(Paragraph("Environmental Data Report", title_style))
+        story.append(Spacer(1, 0.1*inch))
         
+        # Decorative line
+        story.append(Paragraph("<hr width='100%' color='#8fed8f' />" , normal_style))
         metadata = report_data.get('metadata', {})
+        story.append(Paragraph("Report Information", heading1_style))
+
         metadata_text = [
-            f"Report ID: {metadata.get('report_id', 'N/A')}",
-            f"Generated At:{metadata.get('generated_at', 'N/A')}",
-            f"Time Range: {metadata.get('start_date', 'N/A')} to {metadata.get('end_date', 'N/A')}"
+            f"<b>Report ID:</b> {metadata.get('report_id', 'N/A')}",
+            f"<b>Generated At:</b>{metadata.get('generated_at', 'N/A')}",
+            f"<b>Time Range:</b> {metadata.get('start_date', 'N/A')} to {metadata.get('end_date', 'N/A')}",
+            f"<b>Data Types:</b> {', '.join(metadata.get('data_types', ['N/A']))}",
+            f"<b>Total Data Points: </b> {metadata.get('data_points', 0)}"
         ]
         
         for line in metadata_text:
-            story.append(Paragraph(line, styles['Normal']))
+            story.append(Paragraph(line, normal_style))
         
-        story.append(Spacer(1, 12))
+        story.append(Spacer(1, 0.2*inch))
         
         # Summary statistics
         summary = report_data.get('summary', {})
         if summary:
-            story.append(Paragraph("Summary Statistices", styles["Heading2"]))
+            story.append(Paragraph("Summary Statistics", heading1_style))
+            story.append(Paragraph("The following table shows key metrics from your main environmental monitoring system", info_style))
+            story.append(Spacer(1, 0.1*inch))
+
             summary_data = [['Metric', 'Min', 'Max', 'Average', 'Data Points']]
             
             for metric, stats in summary.items():
+                # Format the metic name to a user friendly style
+                metric_name = metric.replace('_', ' ').title()
+
+                # Add units based on the metric type
+                unit = ""
+                if metric == 'temperature':
+                    unit = "°C"
+                elif metric == 'humidity':
+                    unit = "%"
+                elif metric == 'pressure':
+                    unit = "hPa"
+                elif metric == 'flow_rate':
+                    unit = "L/min"
+
+                # Formats the values into units
+                min_val = f"{stats.get('min'):.2f} {unit}" if stats.get('min') is not None else 'N/A'
+                max_val = f"{stats.get('max'):.2f} {unit}" if stats.get('max') is not None else 'N/A'
+                avg_val = f"{stats.get('avg'):.2f} {unit}" if stats.get('avg') is not None else 'N/A'
+
+
                 summary_data.append([
-                    metric.capitalize(),
-                    f"{stats.get('min', 'N/A'):.2f}" if not None else 'N/A',
-                    f"{stats.get('max', 'N/A'):.2f}" if not None else 'N/A',
-                    f"{stats.get('avg', 'N/A'):.2f}" if not None else 'N/A',
+                    metric_name,
+                    min_val,
+                    max_val,
+                    avg_val,
                     f"{stats.get('count', 0)}"
                 ])
             
             summary_table = Table(summary_data, repeatRows=1)
+            summary_table.setStyle(TableStyle([
+                # Header styling
+                ('BACKGROUND', (0,0), (-1,0), eco_dark_green),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,0), 'CENTER'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0,0), (-1, 0), 8),
+                # Data styling
+                ('BACKGROUND', (0,1), (-1, -1), colors.white),
+                ('GRID', (0,0), (-1, -1), 0.5, eco_light_green),
+                ('ALIGN', (1,1), (-1, -1), 'CENTER'),
+
+                # For alternate colors and clearer report vierw
+                ('ROWBACKGROUNDS', (0,1), (-1, -1), [colors.white, colors.Color(0.95,0.98, 0.95)])
+            ]))
             story.append(summary_table)
+            story.append(Spacer(1, 0.2*inch))
         
         # Anomalies
         anomalies = report_data.get('anomalies', {})
         if anomalies:
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Anomalies Detected", styles['Heading2']))
+            story.append(Paragraph("Anomalies Detected", heading1_style))
+            story.append(Paragraph("The following readings deviated significantly from the normal environmental patterns and could require more attention", info_style))
+            story.append(Spacer(1, 0.1*inch))
             
-            anomaly_data = [['Metric', 'Timestamp', 'Value', 'Z-Score']]
+            anomaly_data = [['Metric', 'Timestamp', 'Value', 'Deviation (Z-Score)']]
             for metric, metric_anomalies in anomalies.items():
+                # Formats the metrics to a user friendly format
+                metric_name = metric.replace('_', ' ').title()
+
+                # Adds the units based in the metric type
+                unit = ""
+                if metric == 'temperature':
+                    unit = "°C"
+                elif metric == 'humidity':
+                    unit = "%"
+                elif metric == 'pressure':
+                    unit = "hPa"
+                elif metric == 'flow_rate':
+                    unit = "L/min"
+
                 for anomaly in metric_anomalies:
+                    # Formats
+                    try:
+
+                        from datetime import datetime
+                        timestamp = datetime.fromisoformat(anomaly.get('timestamp').replace('Z', '+00:00'))
+                        formatted_timestamp = timestamp.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        formatted_timestamp = anomaly.get('timestamp', 'N/A')
+                    
+                    # Formats the value with the unit
+                    value = f"{anomaly.get('value'):.2f} {unit}" if anomaly.get('value') is not None else 'N/A'
+                    
                     anomaly_data.append([
-                        metric.capitalize(),
-                        anomaly.get('timestamp', 'N/A'),
-                        f"{anomaly.get('value', 'N/A'):.2f}" if anomaly.get('value') is not None else 'N/A',
+                        metric_name,
+                        formatted_timestamp,
+                        value,
                         f"{anomaly.get('z_score', 'N/A'):.2f}" if anomaly.get('z_score') is not None else 'N/A'
                     ])
             if len(anomaly_data) > 1:
                 anomaly_table = Table(anomaly_data, repeatRows=1)
+                anomaly_table.setStyle(TableStyle([
+                    # Header styling
+                    ('BACKGROUND', (0,0), (-1, 0), eco_blue),
+                    ('TEXTCOLOR', (0,0), (-1, 0), colors.white),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                    # Data styling
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                    ('GRID', (0, 0), (-1, -1), 0.5, eco_light_green),
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                    # Z- Score coloring based on severity
+                    ('TEXTCOLOR', (3, 1), (3, -1), colors.red)
+                ]))
                 story.append(anomaly_table)
+                story.append(Spacer(1, 0.2*inch))
                 
         # Alerts
         alerts = report_data.get('alerts', [])
         if alerts:
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("Alerts", styles['Heading2']))
+            story.append(Paragraph("Environmental Alerts", heading1_style))
+            story.append(Paragraph("The following alerts were generated during the reporting period.", info_style))
+            story.append(Spacer(1, 0.1*inch))
             
             alerts_data = [['Date', 'Type', 'Message']]
             for alert in alerts:
+                # Formats the timestamp to be readable
+                try:
+                    from datetime import datetime
+                    timestamp = datetime.fromisoformat(alert.get('date').replace('Z', '+00:00'))
+                    formatted_date = timestamp.strftime("%Y-%m-%d %H:%M")
+                except:
+                    formatted_date = alert.get('date', 'N/A')
+                
                 alerts_data.append([
-                    alert.get('date', 'N/A'),
-                    alert.get('type', 'N/A'),
+                    formatted_date,
+                    alert.get('type', 'N/A').capitalize(),
                     alert.get('message', 'N/A')
                 ])
             
             alerts_table = Table(alerts_data, repeatRows=1)
+            alerts_table.setStyle(TableStyle([
+                # Header styling
+                ('BACKGROUND', (0,0), (-1, 0), eco_earth),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                # Data Styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, eco_light_green),
+                # Message column alignments
+                ('ALIGN', (0, 1), (1, -1), 'CENTER'),
+                ('ALIGN', (2, 1), (2, -1), 'LEFT'),
+                # Alternate row colors
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.Color(0.95, 0.98, 0.95)])
+            ]))
             story.append(alerts_table)
         
+        story.append(Spacer(1, 0.3*inch))
+        story.append(Paragraph("Environmental Tips", heading2_style))
+
+        tips = [
+            "Monitor your water usage patterns to identify potential leaks or inefficiencies.",
+            "Maintain optimal indoor humdity between 30-50% to reduce energy usage and improve air quality,",
+            "Regular maintenance of your monitoring equipment ensures accurate readings and early detection issues.",
+            "Consider setting up custom alerts for your specific environmental goals."
+        ]
+        
+        for tip in tips:
+            story.append(Paragraph(f" - {tip}", normal_style))
+        
+        # Footer styling
+        story.append(Spacer(1, 0.3*inch))
+        story.append(Paragraph("<hr width='100%' color='#8fed8f' />", normal_style))
+        footer_text = "EcoDetect - Helping you create a sustainable environment through smart monitoring"
+        story.append(Paragraph(footer_text, info_style))
+
         doc.build(story)
         
         # Get PDF content
@@ -812,6 +994,30 @@ def generate_pdf_report(report_data):
         return pdf_content
     except Exception as e:
         logger.error(f"PDF generation error: {str(e)}")
-        # Fallback to simple text PDF
-        return f"Error generating PDF: {str(e)}".encode('utf-8')
+        # Fallback to a simple PDF if theres an error
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        try:
+            # Creates a fallback PDF
+            buffer = BytesIO()
+            document = SimpleDocTemplate(buffer, pagesize=letter)
+            styles = getSampleStyleSheet()
+
+            story = [
+                Paragraph("EcoDetect Report (Error with formatting)", styles['Title']),
+                Paragraph(f"Report generated but formatting failled: {str(e)}", styles['Normal']),
+                Paragraph("Report Data:", styles['Heading2'])
+            ]
+
+            # Add raw data as a text
+            for key, value in report_data.items():
+                story.append(Paragraph(f"{key}: :{value}", styles['Normal']))
+            
+            document.build(story)
+            return buffer.getvalue()
+        except:
+            # If the fallback fails, oonly return a plain text 
+            return f"Error generating PDF: {str(e)}".encode('utf-8')
                 

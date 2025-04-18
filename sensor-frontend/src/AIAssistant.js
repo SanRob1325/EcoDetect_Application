@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiService from './apiService';
-import { Input, Button, Card, Typography, Spin, Select, Alert, DatePicker } from 'antd'
+import { Input, Button, Card, Typography, Spin, Select, Alert, DatePicker, Switch, Tooltip } from 'antd'
 import { Line } from 'react-chartjs-2';
 import moment from 'moment';
-import { LoadingOutlined, RobotOutlined } from '@ant-design/icons'; //And Design loading icon
+import { HistoryOutlined, LoadingOutlined, RobotOutlined } from '@ant-design/icons'; //And Design loading icon
 import './AIAssistant.css'; //CSS sytling
 
 import {
@@ -13,11 +13,11 @@ import {
     CategoryScale,
     LinearScale,
     Title as ChartTitle,
-    Tooltip,
+    Tooltip as ChartTooltip,
     Legend
 } from 'chart.js'
 
-ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, ChartTitle, Tooltip, Legend)
+ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, ChartTitle, ChartTooltip, Legend)
 const { Title, Paragraph } = Typography;
 const { RangePicker } = DatePicker;
 
@@ -27,6 +27,10 @@ const AIAssistant = () => {
     const [days, setDays] = useState(7);
     const [predictions, setPredictions] = useState([]);
     const [anomalies, setAnomalies] = useState([])
+    const [historicalLoading, setHistoricalLoading] = useState(false);
+    // State for historical data
+    const [historicalData, setHistoricalData] = useState([]);
+    const [showHistorical, setShowHistorical] = useState(true);
     const [userQuery, setUserQuery] = useState('');
     const [aiResponse, setAiResponse] = useState('');
     const [loading, setLoading] = useState(false);
@@ -61,9 +65,31 @@ const AIAssistant = () => {
         }
     }, [dataType, days])
 
+    // Fetch historical data
+    const fetchHistoricalData = useCallback(async () => {
+        setHistoricalLoading(true);
+        try{
+            const response = await apiService.getHistoricalData(dataType, days);
+            console.log("Historical data:", response.data);
+            if (response.data && response.data.historical_data) {
+                setHistoricalData(response.data.historical_data);
+            } else {
+                setHistoricalData([]);
+            }
+        } catch (error) {
+            console.error("Error fetching historical data", error);
+            setHistoricalData([]);
+        } finally {
+            setHistoricalLoading(false);
+        }
+    }, [dataType, days]);
+
+    // Fetch bot data sets wheneve the component mounts
     useEffect(() => {
-        fetchPredictiveData()
-    }, [fetchPredictiveData]);
+        fetchPredictiveData();
+        fetchHistoricalData();
+
+    }, [fetchPredictiveData, fetchHistoricalData]);
 
     //Function to handle form sumission (sending the user query to the backend)
     const handleQuerySubmit = async () => {
@@ -81,70 +107,111 @@ const AIAssistant = () => {
             setAiResponse(response.data.answer); //Sets AI response
         } catch (error) {
             console.error("Error fetching AI response", error);
-            setAiResponse("Sorry errors producing the current request")
+            setAiResponse("Sorry, errors producing the current request")
         } finally {
             setLoading(false); //ends loading
         }
     };
 
-    useEffect(() => {
+    // Handle refresh button click
+    const handleRefresh = () => {
         fetchPredictiveData();
-    }, [dataType, days]);
+        fetchHistoricalData();
+    };
 
     const chartData = {
-        labels: predictions.map(p => moment(p.date).format('MMM D')),
+        labels:[ 
+            // Historical dates
+            ...(showHistorical ? historicalData.map(h => moment(h.timestamp).format('MMM D')) : []),
+
+            // Prediction dates
+            ...predictions.map(p => moment(p.date).format('MMM D')),
+        ],
         datasets: [
-            {
-                label: `Predicted ${dataType}`,
-                data: predictions.map(p => p.predicted_value),
-                borderColor: 'blue',
+            //Historical dataset 
+            ...(showHistorical ? [{
+                label: `Historical ${dataType}`,
+                data: [
+                    ...historicalData.map(h => h.value),
+                    ...Array(predictions.length).fill(null) // fill null with prediction dates
+                ],
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 borderWidth: 2,
                 fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+                pointHoverRadius: 5
+            }] : []),
+            // Prediction datasets
+            {
+                label: `Predicted ${dataType}`,
+                data: [
+                    ...Array(showHistorical ? historicalData.length : 0).fill(null),
+                    ...predictions.map(p => p.predicted_value),
+                ],
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
                 tension: 0.3,
+                pointRadius: 3,
+                pointStyle: 'triangle'
             }
         ]
     };
 
-    const charOptions = {
+    const chartOptions = {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: { position: 'top' },
             tooltip: { enabled: true },
+            title: {
+                display: true,
+                text: `${dataType.charAt(0).toUpperCase() + dataType.slice(1)} Trends and Predictions`,
+                font: { size: 16}
+            }
         },
         scales: {
             x: {
-                ticks: { autoSkip: false },
+                ticks: { autoSkip: true, maxRotation: 45, minRotation: 45 },
+                title: { display: true, text: 'Date'}
             },
             y: {
-                beginAtZero: true,
+                beginAtZero: false,
+                title: {
+                    display: true,
+                    text: getYAxisLabel(dataType)
+                }
             },
         },
-        annotation: {
-            annotations: anomalies.map((anomaly) => ({
-                type: 'line',
-                mode: 'vertical',
-                scaleID: 'x',
-                value: moment(anomaly.date).format('MMM D'),
-                borderColor: 'red',
-                borderWidth: 2,
-                label: {
-                    content: `Anomaly: ${anomaly.value}`,
-                    enabled: true,
-                    position: 'top',
-                },
-            })),
-
-        },
+        interaction: {
+            mode: 'index',
+            intersect: false
+        }
     };
+
+    // Helper function to get Y-axis lable based on data type
+    function getYAxisLabel(dataType) {
+        switch(dataType) {
+            case 'temperature': return 'Temperature (°C)';
+            case 'humidity' : return 'Humidity (%)';
+            case 'pressure' : return 'Pressure (hPa)';
+            case 'flow_rate' : return 'Flow Rate (L/min)';
+            default: return dataType;
+        }
+    }
+        
 
     //Styling for AI processing the user query
     return (
         <div className="predictive-analysis-page">
             <Card title={
                 <div style={{ color: 'white', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ marginRight: '10px' }}> Predictive Analysis & Anomaly Detection</span>
-                    {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
-
+                    <span style={{ marginRight: '10px' }}> Predictive Analysis & Historical Anomaly Detection</span>
+                    {(loading || historicalLoading ) && <Spin size="small" style={{ marginLeft: 8 }} />}
                 </div>
             }
                 className='analysis-card'
@@ -175,7 +242,17 @@ const AIAssistant = () => {
                         <Select.Option value={30}>30 days</Select.Option>
                     </Select>
                     <RangePicker value={dateRange} onChange={setDateRange} style={{ marginLeft: 10 }} />
-                    <Button type="primary" onClick={fetchPredictiveData} style={{ backgroundColor: '#4CAF50', borderColor: '#388E3C', borderRadius: '4px' }}>
+                    <Tooltip title="Show/Hide Historical Data">
+                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 10}}>
+                            <HistoryOutlined style={{ marginRight: 5}}/>
+                            <Switch
+                                checked={showHistorical}
+                                onChange={setShowHistorical}
+                                size="small"
+                            />
+                        </div>
+                    </Tooltip>
+                    <Button type="primary" onClick={handleRefresh} style={{ backgroundColor: '#4CAF50', borderColor: '#388E3C', borderRadius: '4px' }}>
                         Refresh Data
                     </Button>
                 </div>
@@ -188,21 +265,22 @@ const AIAssistant = () => {
                     />
                 )}
 
-                {loading && predictions.length === 0 ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
+                {(loading || historicalLoading) && predictions.length === 0 && historicalData.length === 0 ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20, minHeight: '300px', alignItems: 'center' }}>
                         <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
                     </div>
-                ) : predictions.length > 0 ? (
+                ) : (predictions.length > 0 || historicalData.length > 0)? (
                     <div style={{
                         backgroundColor: '#fff',
                         padding: '15px',
                         borderRadius: '8px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        height: '400px'
                     }}>
-                        <Line data={chartData} options={charOptions} />
+                        <Line data={chartData} options={chartOptions} />
                     </div>
                 ) : (
-                    <Alert message="No prediction data available" type="warning" showIcon style={{ marginTop: 20 }} />
+                    <Alert message="No data available" type="warning" showIcon style={{ marginTop: 20 }} />
                 )}
 
                 {anomalies.length > 0 && (
@@ -216,6 +294,14 @@ const AIAssistant = () => {
                                 </li>))}
                         </ul>
                     </Card>
+                )}
+
+                {historicalData.length > 0 && (
+                    <div style={{ marginTop: '10px', fontSize: '14px', color: '#555'}}>
+                        <span style={{ fontWeight: 'bold'}}>Data Summary:</span> Showing
+                        {showHistorical ? ` ${historicalData.length} historical data points and` : ' '}
+                        {predictions.length} predicted values for {dataType}.
+                    </div>
                 )}
             </Card>
 

@@ -26,12 +26,23 @@ class AlertService:
         
         # Get environment variables
         self.sns_topic_arn = os.getenv("SNS_TOPIC_ARN")
+        if not self.sns_topic_arn:
+            logger.warning("SNS_TOPIC_ARN not configured, SMS notifications are disabled")
+
         self.ses_email_sender = os.getenv("SES_EMAIL_SENDER")
-        self.ses_email_recipient = os.getenv("SES_EMAIL_RECIPIENT")
+        if not self.ses_email_sender:
+            logger.warning("SES_EMAIL_SENDER  not configured, email notifications are disabled")
         
+        self.ses_email_recipient = os.getenv("SES_EMAIL_RECIPIENT")
+        if not self.ses_email_recipient:
+            logger.warning("SES_EMAIL_RECIPIENT not configured, email notifications are disabled")
+
         self.threshold_table_name = os.getenv("THRESHOLD_TABLE","Thresholds")
         # Connect to DynamoDB tables
         self.threshold_table = self.dynamodb.Table(self.threshold_table_name)
+        self._notification_preferences_cache = {}
+        self._cache_expiry = 300 # in 5 minutes
+        self._last_cache_update = 0
         
     def check_thresholds(self, raw_data):
         """Check the sensor data against configured thresholds and trigger alerts if exceeded"""
@@ -76,7 +87,7 @@ class AlertService:
                 sensor_data = raw_data
         
             print(f"DEBUG: Processed sensor data: {sensor_data}")
-        
+
             # Rest of the method with debug output...
             if 'temperature' in sensor_data and 'temperature_range' in thresholds:
                 temp = sensor_data['temperature']
@@ -118,9 +129,16 @@ class AlertService:
                     print("DEBUG: Added water_usage_high to exceeded_thresholds")
         
             print(f"DEBUG: Final exceeded_thresholds: {exceeded_thresholds}")
-        
+
+            # Check for previous sent alert 
+            #alert_key = f"{sensor_data.get('device_id')}_{','.join(sorted(exceeded_thresholds))}"
+            #if self._is_alert_in_cache(alert_key):
+                #logger.info("Duplicate alert skipped, it's already cached")
+               # return []
+            
             # If thresholds are exceeded trigger alerts
             if exceeded_thresholds:
+              #  self._add_to_cache(alert_key)
                 self._trigger_alerts(sensor_data, exceeded_thresholds, thresholds)
                 self._store_alert_history_dynamodb(sensor_data, exceeded_thresholds, thresholds)
         
@@ -158,17 +176,63 @@ class AlertService:
         """Sends notifications for exceeded thresholds"""
         message = self._generate_alert_message(sensor_data, exceeded_thresholds, thresholds)
         
-        # send SMS alert via SNS
-        self._send_sns_alert(message)
+        # Get user preferences
+        # Passed in from the database
+        user_id = sensor_data.get("user_id", "default_user")
+        notification_prefs = self._get_notification_preferences(user_id)
+
+        # Determine alert severity
+        is_critical = any(t in ['temperature_high', 'temperature_low', 'humidity_high', 'humidity_low'] for t in exceeded_thresholds)
+
+        # Check if the alert should be based on criticality
+        if notification_prefs.get("critical_only", False) and not is_critical:
+            logger.info("Non-critical alert suppressed due to user preferences")
+            return
         
-        # Send email alert via SES
-        self._send_email_alert(
-            subject="Environmental Alert: Threshold Exceeded",
-            message=message,
-            sensor_data=sensor_data,
-            exceeded_thresholds=exceeded_thresholds,
-            thresholds=thresholds
-        )
+        # Send SMS alert if enabled
+        if notification_prefs.get("sms_enabled", True):
+            self._send_sns_alert(message)
+        else:
+            logger.debug("SMS alert suppressed due to user preferences")
+
+        if notification_prefs.get("email_enabled", True):
+    
+        
+            # Send email alert via SES
+            self._send_email_alert(
+                subject="Environmental Alert: Threshold Exceeded",
+                message=message,
+                sensor_data=sensor_data,
+                exceeded_thresholds=exceeded_thresholds,
+                thresholds=thresholds
+            )
+        else:
+            logger.debug("Email alert suppressed due to user preferences")
+    
+    def _get_notification_preferences(self, user_id):
+        """Get notification preferences for user"""
+        default_prefs = {
+            "email_enabled": True,
+            "sms_enabled": True,
+            "critical_only": False
+        }
+
+        # Try get from mongoDB if available
+        if self.mongo_db is not None:
+            prefs = self.mongo_db.notification_preferences.find_one({"user_id": user_id})
+            if prefs:
+                return prefs
+        
+        try:
+            table_name = os.getenv("PREFERENCES_TABLE", "UserPreferences")
+            table = self.dynamodb.Table(table_name)
+            response = table.get_item(Key={"user_id": user_id})
+            prefs = response.get("Item", {}).get("notification_preferences")
+            if prefs:
+                return prefs
+        except Exception as e:
+            logger.error(f"Error fetching notification preferences: {str(e)}")
+        return default_prefs
     
     def _generate_alert_message(self, sensor_data, exceeded_thresholds, thresholds):
         """Create a formatted alert message based on exceeded thresholds"""

@@ -119,6 +119,7 @@ const apiService = {
     previewReport: (payload) => api.post('/api/reports/preview', payload),
     getRooms: () => api.get('/api/rooms'),
     getRoomSensorData: (room) => api.get(`/api/sensor-data/${room}`),
+    getHistoricalData: (dataType, days) => api.get(`/api/historical-data?data_type=${dataType}&days=${days}`)
 };
 
 export default apiService;

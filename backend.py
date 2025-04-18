@@ -1198,6 +1198,115 @@ def generate_fallback_response(query, temperature, humidity, flow_rate):
     # Default response
     return "I can help you reduce your environmental impact and monitor your resource usage. Feel free to ask about your sensor readings, carbon footprint reduction tips, or water conservation strategies"
 
+# For getting previous historical data for the predicitve analysis
+@app.route('/api/historical-data', methods=['GET'])
+def get_historical_data():
+    """Fetch historical data sensor data for chart visualisation"""
+    try:
+        # Get query parameters 
+        data_type = request.args.get('data_type', 'temperature')
+        days = int(request.args.get('days', 7))
+
+        # Calculate the cutoff time based on requested days
+        cutoff_time = datetime.now() - timedelta(days=days)
+
+        # Determine the appropriate collection based on the data type
+        if data_type == 'flow_rate':
+            collection = water_data_collection
+        else:
+            collection = sensor_data_collection
+
+        # Query for data points, limiting to reasonable amount for visualisation
+        cursor = collection.find(
+            {
+                data_type: {"$exists": True},
+                "timestamp": {"$gte": cutoff_time}
+            },
+            {
+                "timestamp": 1,
+                data_type: 1,
+                "_id": 0
+            }
+        ).sort("timestamp", 1)
+
+        # Process the data
+        historical_data = []
+        for record in cursor:
+            if data_type in record and record[data_type] is not None:
+                try:
+                    value = float(record[data_type])
+                    historical_data.append({
+                        "timestamp": record["timestamp"].isoformat(),
+                        "value": round(value, 2)
+                    })
+                except (ValueError, TypeError):
+                    continue
+        
+        # If mongDB data is not enough or insufficient, try DynamoDB as a fallback
+        if len(historical_data) < 5:
+            logging.info(f"Insufficient histroical data in MongoDB, trying DynamoDB")
+            # Determine the appropriate table
+            if data_type == 'flow_rate':
+                table = WATER_TABLE
+                device_id = 'WaterSensor'
+            else:
+                table = SENSOR_TABLE
+                device_id = os.getenv('THING_NAME2', "Main_Pi")
+            
+            # Query DynamoDB
+            try:
+                response = table.query(
+                    KeyConditionExpression=Key('device_id').eq(device_id),
+                    ScanIndexForward=True
+                )
+
+                for item in response.get('Items', []):
+                    timestamp = item.get('timestamp')
+
+                    # Try to extract the value
+                    value = None
+                    if data_type in item:
+                        value = item[data_type]
+                    elif 'payload' in item and isinstance(item['payload'], dict):
+                        payload = item['payload']
+                        if data_type in payload:
+                            value = payload[data_type]
+                    
+                    if timestamp and value is not None:
+                        try:
+                            float_value = float(value)
+                            historical_data.append({
+                                "timestamp": timestamp,
+                                "value": round(float_value, 2)
+                            })
+                        except (ValueError, TypeError):
+                            continue
+            except Exception as e:
+                logging.error(f"Error fetching DynamoDB: {str(e)}")
+
+        # Sort data by timestamp to ensure chronological order
+        historical_data = sorted(historical_data, key=lambda x:x["timestamp"])
+
+        # Sample data to prevent cahrt overcrowding if theres too many points
+        if len(historical_data) > 100:
+            # Take very Nth item to get around 100 points
+            n = len(historical_data) // 100
+            historical_data = historical_data[::n]
+
+        return jsonify({
+            "data_type": data_type,
+            "historical_data": historical_data,
+            "start_date": historical_data[0]["timestamp"] if historical_data else None,
+            "end_date": historical_data[-1]["timestamp"] if historical_data else None,
+            "point_count": len(historical_data)
+        })   
+    except Exception as e:
+        logging.error(f"Error fetching historical data: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": "Failed to fetch historical data",
+            "message": str(e)
+        }),500
+         
 # Fetch sensor data API
 @app.route('/api/sensor-data', methods=['GET'])
 def get_sensor_data():

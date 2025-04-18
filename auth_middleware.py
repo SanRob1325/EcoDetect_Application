@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 class AuthMiddleware:
     def __init__(self, app, user_pool_id, app_client_id, region="eu-west-1"):
+
+        self.public_endpoints = ['/api/health', '/api/login']
+        self.api_key_endpoints = ['/api/sensor-data-upload']
+        self.api_keys = self._load_api_keys()
         self.app = app
         self.user_pool_id = user_pool_id
         self.app_client_id = app_client_id
