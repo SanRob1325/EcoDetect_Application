@@ -23,11 +23,14 @@ from io import StringIO
 from sklearn.ensemble import IsolationForest
 from statsmodels.tsa.arima.model import ARIMA
 import time
+import uuid
+import sys
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*", "supports_credentials": True}}, expose_headers=["Authorization"])
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+CORS(app, resources={r"/api/*": {"origins": allowed_origins, "supports_credentials": True}}, expose_headers=["Authorization"])
 app.register_blueprint(report_routes)
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
 sns_client = boto3.client("sns", region_name="eu-west-1")
@@ -93,6 +96,53 @@ try:
 except Exception as e:
     logging.error(f"Error fetching Cognito JWKS: {str(e)}")
     jwks = {"keys": []}
+
+class APIError(Exception):
+    """Base class for API errors"""
+    def __init__(self, message, status_code=400):
+        self.message = message
+        self.status_code = status_code
+        self.error_id = f"err-{uuid.uuid4().hex[:8]}"
+        super().__init__(self.message)
+
+@app.errorhandler(APIError)
+def handle_api_error(error):
+    """Handler for API errors"""
+    response = jsonify({
+        "message": error.message,
+        "error_id": error.error_id
+    })
+    response.status_code = error.status_code
+    return response 
+
+@app.errorhandler(Exception)
+def handle_generic_exceptions(e):
+    """Handler for uncaught exceptions"""
+    error_id = f"err-{uuid.uuid4().hex[:8]}"
+    logging.error(f"Unhandled exception [{error_id}]: {str(e)}", exc_info=True)
+
+    # Returning a sanistised response
+    return jsonify({
+        "message": "An internal server error occured",
+        "error_id": error_id
+    }), 500
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    # Content Security Policy
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; object-src 'none'"
+
+    # Prevent MIME type sniffing
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+
+    # Control iframe embedding
+    response.headers['X-Frame-Options'] = 'DENY'
+
+    # Enable browser XSS protection
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+
+    return response 
 
 def verify_token(token):
     """Verify the Cognito JWT token"""
@@ -273,6 +323,21 @@ alert_service= AlertService(
     dynamodb=dynamodb,
     mongo_db=db
 )
+
+def validate_environment():
+    """Validate critical environment variables"""
+    required_vars = [
+        "COGNITO_USER_POOL_ID",
+        "COGNITO_APP_CLIENT_ID",
+        "MONGO_URI"
+    ]
+
+    missing = [var for var in required_vars if not os.getenv(var)]
+
+    if missing:
+        logging.critical(f"Missing required environmen variables: {', '.join(missing)}")
+        sys.exit(1)
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple check for checking enpoint API's are working"""
@@ -423,16 +488,13 @@ def receive_sensor_data():
         raw_data = request.json
         
         if not raw_data:
-            return jsonify({"error": "Empty request body"}), 400
-        
+            raise APIError("Empty request body", 400)
+                
         required_keys = ["temperature", "humidity", "pressure", "room_id"]
         missing_keys = [key for key in required_keys if key not in raw_data]
         if missing_keys:
-            return jsonify({"error": f"Missing required keys: {missing_keys}"}), 400
+            raise APIError(f"Missing required keys: {', '.join(missing_keys)}", 400)
         
-        # Log of incoming data
-        logging.debug(f"Recieved sensor data: {raw_data}")
-
         # Normalise the data
         normalized_data = normalize_sensor_data(raw_data)
         #add time stamp and metadata
@@ -467,9 +529,12 @@ def receive_sensor_data():
             return jsonify({"error": "Failed to insert sensor data"}), 500
         
         return jsonify({"message": "Data recieved and normalized", "data": normalized_data_response, "exceeded_thresholds": exceeded_thresholds}), 200
+    
+    except APIError:
+        raise
     except Exception as e:
         logging.error(f"Error in /api/sensor-data: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        raise APIError("Failed to process sensor data", 500)
 
 @app.route('/api/rooms', methods=['GET'])
 def get_room_list():
@@ -624,6 +689,211 @@ def fetch_recent_sensor_data(device_id):
         logging.error(f"Error fetching DynamoDB data: {e}", exc_info=True)
         return []
 
+def format_sensor_values(data):
+    """Format sensor data to be human readable and rounded up data"""
+    formatted_data = {}
+
+    # Formatted temperature 
+    if 'temperature' in data and data['temperature'] != 'N/A':
+        try:
+            formatted_data['temperature'] = f"{float(data['temperature']):.1f}°C"
+        except (ValueError, TypeError):
+            formatted_data['temperature'] = data['temperature']
+    else:
+        formatted_data['temperature'] = data.get('temperature', 'N/A')
+
+    # Format humidity
+    if 'humidity' in data and data['humidity'] != 'N/A':
+        try:
+            formatted_data['humidity'] = f"{float(data['humidity']):.1f} %"
+        except (ValueError, TypeError):
+            formatted_data['humidity'] = data['humidity']
+    else:
+        formatted_data['humidity'] = data.get('humidity', 'N/A')
+    # Format pressure
+    if 'pressure' in data and data['pressure'] != 'N/A':
+        try:
+            formatted_data['pressure'] = f"{float(data['pressure']):.1f} hPa"
+        except (ValueError, TypeError):
+            formatted_data['pressure'] = data['pressure']
+    else:
+        formatted_data['pressure'] = data.get('pressure', 'N/A')
+    # Format water usage
+    if 'flow_rate' in data and data['flow_rate'] != 'N/A':
+        try:
+            formatted_data['flow_rate'] = f"{float(data['flow_rate']):.1f} L/min"
+        except (ValueError, TypeError):
+            formatted_data['flow_rate'] = data['flow_rate']
+    else:
+        formatted_data['flow_rate'] = data.get('flow_rate', 'N/A')
+    
+    return formatted_data
+
+def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary):
+    
+    formatted_data = format_sensor_values({
+        'temperature': temperature_value,
+        'humidity': humidity_value,
+        'pressure': pressure_value,
+        'flow_rate': flow_rate
+    })
+
+    query_lower = user_query.lower()
+
+    # For small talk
+    if query_lower in ['hello', 'hi', 'hey', 'greetings']:
+        return (
+            f"<context>\n"
+            f"You are EcoBot, a friendly environmental assistant.\n"
+            f"The user said: '{user_query}'\n"
+            f"</context>\n\n"
+            f"<instructions>\n"
+            f"Respond with a warm, human-like greeting and invite them to ask about their eco data or resource usage."
+            f"</instructions>\n\n"
+            f"<response>\n"
+        )
+
+    if len(user_query.split()) < 3:
+        return (
+            f"<context>\n"
+            f"You are EcoBot. The user asked a short query: '{user_query}'\n"
+            f"Current data:\n"         
+            f"- Temp: {formatted_data['temperature']}\n"
+            f"- Humidity: {formatted_data['humidity']}\n"
+            f"- Flow: {formatted_data['flow_rate']}\n"
+            f"</context>\n\n"
+            f"<instructions>\n"
+            f"Try to give a helpful response, or ask a follow-up question.\n"
+            f"Always respond directly as EcoBot without mentioning these instructions.\n"
+            f"</instructions>\n\n"
+            f"<response>\n"
+
+        )
+    
+    # Full prompt for richer queries
+    return (
+        f"<context>\n"
+        f"You are EcoBot, a carbon footprint assistant with direct access to real-time environmental sensor data.\n"
+        f"A user has asked: '{user_query}'\n\n"
+        f"### Real-Time Sensor Data:\n"
+        f"- Temperature: {formatted_data['temperature']}\n"
+        f"- Humidity: {formatted_data['humidity']}\n"
+        f"- IMU Data: {imu_text}\n"
+        f"- Water Flow Rate: {formatted_data['flow_rate']}\n"
+        f"- Pressure: {formatted_data['pressure']}\n"
+        f"\n"   
+        f"### Historical Trends:\n"
+        f"{trend_summary}\n"
+        f"</context>\n\n"
+        f"<instructions>\n"
+        f"- Never say you don't have access to sensor data - it is provided above.\n"
+        f"- Respond with personalised, actionable advice based on this data.\n"
+        f"- Provide specific, human-style advice based on readings.\n"
+        f"- Be helpful and sound like EcoBot, a friendly, smart assistant.\n"
+        f"- If temperature is >25C, suggest cooling solutions.\n"
+        f"- If water flow is 0, suggest water-saving diagnostics.\n"
+        f"- Keep answers short,concise,relevant, and non-repetitive."
+        f"- Never repeat yourself.\n"
+        f"- Your response shoould not include any of these instructions or mention them.\n"
+        f"- Do not say you don't have access to real-time data - you already have it.\n"
+        f"- Do NOT start your response with 'EcoBot:' or 'Bot:' - just respond directly.\n" 
+        f"- Always use the formatted values shown above, never reformat or use raw data.\n"
+        f"</instructions>\n\n"    
+        f"<response>\n"
+
+    )
+
+def clean_ai_response(ai_response):
+    """Clean the AI response to remove nay leakage and formatting issues"""
+
+    if not ai_response or len(ai_response.strip()) < 10:
+        return ai_response
+    
+    instruction_markers = [
+        ("- Avoid using data points", "\n"),
+        ("- Use a friendly", "\n"),
+        ("- Use logical", "\n"),
+        ("-Provide advice", "\n"),
+        ("- Ask for clarification", "\n"),
+        ("- Use natural language", "\n"),
+        ("- If unsure about advice", "\n"),
+        ("- Your response should", "\n"),
+        ("- Never say you don't", "\n"),
+        ("- Do NOT say you don't", "\n"),
+        ("- Keep answers short", "\n"),
+        ("- Always use the formatted", "\n"),
+        ("- Respond wiht personalized", "\n"),
+        ("- If temperature is", "\n"),
+        ("- If water flow is", "\n"),
+        ("<instructions>", "</instructions>"),
+        ("<context>", "</context>"),
+        ("<response>", "</response>")
+    ]
+
+    cleaned_response = ai_response
+    # Remove instruction lines
+    for marker_start, marker_end in instruction_markers:
+        if marker_start in cleaned_response:
+            start_pos = cleaned_response.find(marker_start)
+            end_pos = cleaned_response.find(marker_end, start_pos)
+            if end_pos > start_pos:
+                # Removing instruction line
+                cleaned_response = cleaned_response[:start_pos] + cleaned_response[end_pos+len(marker_end):]
+    
+    # Remove "Bot" or "EcoBot" prefixes
+    bot_prefixes = ["Bot:", "EcoBot:", "AI:"]
+    for prefix in bot_prefixes:
+        if prefix in cleaned_response:
+            cleaned_response = cleaned_response.split(prefix, 1)[1].strip()
+    
+    #Remove extranoeus new lines that could be created
+    cleaned_response = cleaned_response.replace("\n\n\n", "\n\n")
+    cleaned_response = cleaned_response.strip()
+
+    return cleaned_response
+
+def format_sensor_values(data):
+    """Format sensor data to be human readable with proper rounding"""
+    formatted_data = {}
+
+    # Format temperature 
+    if 'temperature' in data and data['temperature'] != 'N/A':
+        try:
+            formatted_data['temperature'] = f"{float(data['temperature']):.1f}°C"
+        except (ValueError, TypeError):
+            formatted_data['temperature'] = data['temperature']
+    else:
+        formatted_data['temperature'] = data.get('temperature', 'N/A')
+
+    # Format humidity
+    if 'humidity' in data and data['humidity'] != 'N/A':
+        try:
+            formatted_data['humidity'] = f"{float(data['humidity']):.1f}%"
+        except (ValueError, TypeError):
+            formatted_data['humidity'] = data['humidity']
+    else:
+        formatted_data['humidity'] = data.get('humidity', 'N/A')
+    
+    # Format pressure
+    if 'pressure' in data and data['pressure'] != 'N/A':
+        try:
+            formatted_data['pressure'] = f"{float(data['pressure']):.1f} hPa"
+        except (ValueError, TypeError):
+            formatted_data['pressure'] = data['pressure']
+    else:
+        formatted_data['pressure'] = data.get('pressure', 'N/A')
+
+    # Format flow_rate
+    if 'flow_rate' in data and data['flow_rate'] != 'N/A':
+        try:
+            formatted_data['flow_rate'] = f"{float(data['flow_rate']):.1f} L/min"
+        except (ValueError, TypeError):
+            formatted_data['flow_rate'] = data['flow_rate']
+    else:
+        formatted_data['flow_rate'] = data.get('flow_rate', 'N/A')
+    
+    return formatted_data
+
 # Using Titan Amazon AI agent
 @app.route('/api/ai-assistant', methods=['POST'])
 def ai_assistant():
@@ -650,7 +920,7 @@ def ai_assistant():
         }
         log_id = query_logs_collection.insert_one(query_log).inserted_id
         
-        # Fetch realtime sensor data with error handling
+        # Fetch real-time sensor data with error handling
         try:
             sensor_data = sensor_data_collection.find_one(sort=[("timestamp", -1)]) or {}
             # Check data freshness aler if data is mor than an hour old
@@ -723,44 +993,17 @@ def ai_assistant():
             imu_text ="N/A"
         
         # Generate more informative trends analysis
-        trend_summary = ""
-        if sensor_trends:
-            try:
-                trend_summary += "Temperature trend:"
-                if 'temperature' in sensor_trends:
-                    temp_mean = sensor_trends['temperature'].get('mean', 'N/A')
-                    temp_std = sensor_trends['temperature'].get('std', 'N/A')
-                    trend_summary += f"Average {temp_mean:.1f} C ({temp_std:.1f} ). C"
-                trend_summary += "Humidity trend: "
-                if 'humidity' in sensor_trends:
-                    hum_mean = sensor_trends['humidity'].get('mean', 'N/A')
-                    hum_std = sensor_trends['humidity'].get('std', 'N/A')
-                    trend_summary += f"Average {temp_mean:.1f} % ({hum_std:.1f}%)"
-            except Exception as e:
-                logging.error(f"Error formatting trends: {str(e)}")
-                trend_summary = "Trend analysis unavailable."
+        trend_summary = format_trend_summary(sensor_trends)
         
-        prompt = (
-            f"User Query: {user_query}\n"
-            f"Environmental Data Context:\n"
-            f"- Temperature: {temperature_value} Celsius\n"
-            f"- Humidity: {humidity_value}%\n"
-            f"- IMU Data: {imu_text}\n"
-            f"- Water Flow Rate: {flow_rate} L/min\n\n"
-            f"- Pressure: {pressure_value} hPa\n"
-            f"Trend Summary: {trend_summary}\n\n"
-            "Instructions:\n"
-            "1. Provide personalised advice based on environmental data above. \n"
-            "2. Focus on actionable tips to reduce carbon footprint and improve efficiency.\n"
-            "3. If the user asks sensor readings, provide the specific values requested"
-            "4. Based on the real-time sensor data and long term trends,provide actionable,personalised advice to reduce the users carbon footprint and improve water efficiency. \n"
-            "5. Avoid generic tips; instead tailor recommendations to the specific environmental conditions provided. \n"
-            "6. If the water flow is 0 L/min, suggest checking leaks or usage patterns. \n"
-            "7. If the temperature is above 25 degrees Celsius,suggest cooling solutions. \n"
-            "8. If the user asks for temperature,humidity,imu data from the sensor please provide the information. \n"
-            "9. If greeting the user, introduce yourseld as EcoBot,a carbon footprint advisor. \n"
-            "10. If certain data is unavailable (marked as N/A), focus on general sustainability advice. \n"
-            "11. Keep responses focused, actionable, and specfic to the environmental conditions.\n"
+        prompt = robust_query_prompt(
+            user_query,
+            temperature_value,
+            humidity_value,
+            pressure_value,
+            imu_text,
+            flow_rate,
+            trend_summary
+        
         )
         logging.debug(f"Generated prompt: {prompt}")
         
@@ -774,7 +1017,7 @@ def ai_assistant():
                 "inputText": prompt,
                 "textGenerationConfig": {
                     "maxTokenCount": 300,
-                    "stopSequences": [],
+                    "stopSequences": ["|"],
                     "temperature": 0.7,
                     "topP": 1
                 }
@@ -786,11 +1029,13 @@ def ai_assistant():
                 accept='application/json'
             )
             response_body = json.loads(response['body'].read().decode('utf-8'))
-            ai_response = response_body.get('results', [{}])[0].get('outputText', '')
+            raw_ai_response = response_body.get('results', [{}])[0].get('outputText', '')
             
+            ai_response = clean_ai_response(raw_ai_response)
             # Check for empty short responses
             if not ai_response or len(ai_response.strip()) < 20:
                 raise Exception("AI returned empty or too short response")
+            
         except Exception as e:
             logging.error(f"Primary AI model error: {str(e)}", exc_info=True)
             error_message = str(e)
@@ -801,7 +1046,7 @@ def ai_assistant():
                 ai_response = generate_fallback_response(user_query, temperature_value, humidity_value, flow_rate)
             except Exception as fallback_error:
                 logging.error(f"Fallback response generation failed: {str(fallback_error)}")
-                ai_response = "I aplogise, I'm having trouble processing your request at the moment. Please try again shortly."
+                ai_response = "I apologise, I'm having trouble processing your request at the moment. Please try again shortly."
         
         # Log completion of the query
         execution_time = time.time() - start_time
@@ -833,23 +1078,78 @@ def ai_assistant():
         logging.error("Error in AI Assistant endpoint", exc_info=True)
         return jsonify({"error":f"Failed to process request: {str(e)}"}),500
 
+
+def format_trend_summary(sensor_trends):
+    """Format trend summary with proper rounding"""
+    trend_summary = ""
+    if sensor_trends:
+        try:
+            trend_summary += "Temperature trend: "
+            if "temperature" in sensor_trends:
+                temp_mean = sensor_trends['temperature'].get('mean', 'N/A')
+                temp_std = sensor_trends['temperature'].get('std', 'N/A')
+                if temp_mean != 'N/A' and temp_std != 'N/A':
+                    trend_summary += f"Average {temp_mean:.1f}°C (±{temp_std:.1f}°C). "
+                else:
+                    trend_summary += "Data unavailable. "
+            
+            trend_summary += "Humidity trend: "
+            if 'humidity' in sensor_trends:
+                hum_mean = sensor_trends['humidity'].get('mean', 'N/A')
+                hum_std = sensor_trends['humidity'].get('std', 'N/A')
+                if hum_mean != 'N/A' and hum_std != 'N/A':
+                    trend_summary += f"Average {hum_mean:.1f}% (±{hum_std:.1f}%)"
+                else:
+                    trend_summary += "Data unavailable."
+        except Exception as e:
+            trend_summary = "Trend analysis unavailable."
+    
+    return trend_summary
+
 def generate_fallback_response(query, temperature, humidity, flow_rate):
     """Generate a simple fallback response when AI service fails"""
     query = query.lower()
     
+    formatted_data = {}
+    if temperature != 'N/A':
+        try:
+            formatted_data['temperature'] = f"{float(temperature):.1f} °C"
+        except (ValueError, TypeError):
+            formatted_data['temperature'] = temperature
+    else:
+        formatted_data['temperature'] = 'N/A'
+
+    #Format humidity
+    if humidity != 'N/A':
+        try:
+            formatted_data['humidity'] = f"{float(humidity):.1f}%"
+        except (ValueError, TypeError):
+            formatted_data['humidity'] = humidity
+    else:
+        formatted_data['humidity'] = 'N/A'
+
+    #Format flow_rate
+    if flow_rate != 'N/A':
+        try:
+            formatted_data['flow_rate'] = f"{float(flow_rate):.1f} L/min"
+        except (ValueError, TypeError):
+            formatted_data['flow_rate'] = flow_rate
+    else:
+        formatted_data['flow_rate'] = 'N/A'  
+
     # Simple greeting
     if any(word in query for word in ['hello', 'hi', 'hey', 'greetings']):
-        return "Hello! I'm EcoBot, you carbon footprint advisor. I can help you with eco-friendly tips and analyse your environmental data. How can I assist you today?"
+        return "Hello! I'm EcoBot, your carbon footprint advisor. I can help you with eco-friendly tips and analyse your environmental data. How can I assist you today?"
 
     # Data request 
     if any(word in query for word in ['temperature', 'humid', 'water', 'flow', 'sensor']):
         response = "Here are your current environmental readings:\n"
-        if temperature != 'N/A':
-            response += f"- Temperature: {temperature} C\n"
-        if humidity != 'N/A':
-            response += f"- Humidity: {humidity}%\n"
-        if flow_rate != 'N/A':
-            response += f"- Water Flow: {flow_rate} L/min\n"
+        if formatted_data['temperature'] != 'N/A':
+            response += f"- Temperature: {formatted_data['temperature']} Celsius\n"
+        if formatted_data['humidity'] != 'N/A':
+            response += f"- Humidity: {formatted_data['humidity']} %\n"
+        if formatted_data['flow_rate'] != 'N/A':
+            response += f"- Water Flow: {formatted_data['flow_rate']} L/min\n"
         return response
     
     # Carbon footprint
@@ -858,20 +1158,45 @@ def generate_fallback_response(query, temperature, humidity, flow_rate):
             "Consider using energy-efficient appliances to reduce electricity consumption. ",
             "Unplug electronics when not in use to prevent phantom energy usage.",
             "Adjust your thermostat by just 1-2 degrees to save significant energy.",
-            "Use LED bulbs which consume up to 90% less energy that incadescendent bulbs.",
+            "Use LED bulbs which consume up to 90% less energy that incandescent bulbs.",
             "Reduce water heating costs by lowering your water heater temperature."
         ]
-        return f"Here are some tips to reduce you carbon footprint:\n- " + "\n- ".join(random.sample(tips, 3))
+        return f"Here are some tips to reduce your carbon footprint:\n- " + "\n- ".join(random.sample(tips, 3))
     
     # Water conservation
     if any(word in query for word in ['water', 'conservation', 'save water']):
-        if flow_rate == 0:
-            return "I notice your current water flow is 0 L/min. If you're not actively using water, that's good! Here are some water conservation tips:\n- Fix leaky taps and pipes\n- Install water-efficient fixtures\n- Collect and reuse rainwater for plants\n- Run full loads in dishwashers and washing machines"
-        else:
-            return "Here are some water conservation tips:\n- Take shorter showers\n- Install low-flow fixtures\n- Fix leaks promptly\n- Use drough-resistant plants in your garden"
+        try:
+            flow_value = 0
+            if flow_rate != 'N/A':
+                flow_value = float(flow_rate)
+
+            if flow_value == 0:
+                return "I notice your current water flow is 0 L/min. If you're not actively using water, that's good! Here are some water conservation tips:\n- Fix leaky taps and pipes\n- Install water-efficient fixtures\n- Collect and reuse rainwater for plants\n- Run full loads in dishwashers and washing machines"
+            else:
+                return f"Your current water flow is {formatted_data['flow_rate']}. Here are some water conservation tips:\n- Take shorter showers\n- Install low-flow fixtures\n- Fix leaks promptly\n- Use drought-resistant plants in your garden"
+        except:
+            return "Here are some water conservation tips:\n- Take short showers\n- Install low-flow fixtures\n- Fix leaks promptly\n- Use drought-resistant plants in your garden"
     
+    # Room comfort
+    if any(word in query for word in ['comfortable', 'comfort', 'ideal', 'room']):
+        try:
+            temp_value = float(temperature) if temperature != 'N/A' else None
+            humidity_value = float(humidity) if humidity != 'N/A' else None
+
+            if temp_value and humidity_value:
+                if temp_value > 25:
+                    return f"Your room temperature is {formatted_data['temperature']}, which is a bit warm. For optimal comfort, most people prefer 20-24°C. Your humidity is {formatted_data['humidity']}. Consider opening windows or using a fan to improve comfort"
+                elif temp_value < 18:
+                    return f"Your room temperature is {formatted_data['temperature']}, which is a bit cool. For optimal comfort, most people prefer 20-24°C. Your humidity is {formatted_data['humidity']}. Consider adjusting you heating for better comfort."
+
+                else:
+                    return f"Your room temperature is {formatted_data['temperature']} and humidity is {formatted_data['humidity']}. These are within a comfortable range for most people.Ideal indoor conditions are typically 20-24°C with 30-60% humidity."
+            else:
+                return "For you optimal comfort, most people prefer room temperatures between 20-24°C with humidity levels between 30-60%"
+        except:
+            return "For you optimal comfort, most people prefer room temperatures between 20-24°C with humidity levels between 30-60%"
     # Default response
-    return "I can help you reduce you environmental impact and monitor you resource usage. Feel free to ask about your sensor readings, carbon footprint reduction tips, or water conservation strategies"
+    return "I can help you reduce your environmental impact and monitor your resource usage. Feel free to ask about your sensor readings, carbon footprint reduction tips, or water conservation strategies"
 
 # Fetch sensor data API
 @app.route('/api/sensor-data', methods=['GET'])
@@ -950,7 +1275,7 @@ def get_sensor_data():
                 "gyroscope": [
                     round(float(gyro_raw.get("x", 0)), 2),
                     round(float(gyro_raw.get("y", 0)), 2),
-                    round(float(accel_raw.get("z", 0)), 2),
+                    round(float(gyro_raw.get("z", 0)), 2),
                 ],
                 "magnetometer": [
                     round(float(mag_raw.get("x", 0)), 2),
@@ -2132,4 +2457,5 @@ def calculate_vehicle_impact(movement_data):
 
     
 if __name__ == '__main__':
+    validate_environment()
     app.run(host='0.0.0.0',port=5000)
