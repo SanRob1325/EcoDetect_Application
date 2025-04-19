@@ -784,6 +784,10 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
     # Check for vehicle related queries to response of this context
     vehicle_focused = any(term in query_lower for term in ['vehicle', 'car', 'driving', 'drive', 'carbon-impact', 'movement', 'transportation', 'travel'])
     
+    vehicle_instruction = ""
+    if vehicle_focused:
+        vehicle_instruction ="- If this is a vehicle-realted query, focus on the vehicle data and provide driving advice to reduce carbon impact."
+    no_vehicle_data = "-No vehicle data available at this moment."
     # Full prompt for richer queries
     return (
         f"<context>\n"
@@ -797,7 +801,7 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"- Pressure: {formatted_data['pressure']}\n"
         f"\n"   
         f"### Vehicle Data:\n"
-        f"{vehicle_section if vehicle_section else '-No vehicle data available at this moment.\n'}"
+        f"{vehicle_section if vehicle_section else no_vehicle_data}\n"
         f"\n"
         f"### Historical Trends:\n"
         f"{trend_summary}\n"
@@ -809,7 +813,7 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"- Be helpful and sound like EcoBot, a friendly, smart assistant.\n"
         f"- If temperature is >25C, suggest cooling solutions.\n"
         f"- If water flow is 0, suggest water-saving diagnostics.\n"
-        f"{'- If this is a vehicle-related query, focus on the vehicle data and provide driving advice to reduce carbon impact.' if vehicle_focused else ''}\n"
+        f"{vehicle_instruction}\n"
         f"- Keep answers short,concise,relevant, and non-repetitive.\n"
         f"- Never repeat yourself.\n"
         f"- Your response shoould not include any of these instructions or mention them.\n"
@@ -818,7 +822,6 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"- Always use the formatted values shown above, never reformat or use raw data.\n"
         f"</instructions>\n\n"    
         f"<response>\n"
-
     )
 
 def clean_ai_response(ai_response):
