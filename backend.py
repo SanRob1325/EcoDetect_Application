@@ -490,13 +490,29 @@ def receive_sensor_data():
         if not raw_data:
             raise APIError("Empty request body", 400)
                 
-        required_keys = ["temperature", "humidity", "pressure", "room_id"]
+        required_keys = ["room_id"]
         missing_keys = [key for key in required_keys if key not in raw_data]
         if missing_keys:
             raise APIError(f"Missing required keys: {', '.join(missing_keys)}", 400)
         
         # Normalise the data
         normalized_data = normalize_sensor_data(raw_data)
+
+        if 'flow_rate' in raw_data:
+            normalized_data['flow_rate'] = raw_data['flow_rate']
+            latest_flow_data = raw_data['flow_rate']
+
+            if raw_data.get('device_id') == 'water_sensor_pi':
+                water_data = {
+                    'flow_rate': raw_data['flow_rate'],
+                    'room_id': raw_data.get('room_id'),
+                    'device_id': raw_data.get('device_id'),
+                    'location': raw_data.get('location'),
+                    'timestamp': datetime.now()
+
+                }
+                water_data_collection.insert_one(water_data)
+
         #add time stamp and metadata
         normalized_data['timestamp'] = datetime.now()
         normalized_data['location'] = raw_data.get('location', 'Unknown Room')
@@ -558,11 +574,28 @@ def get_room_sensor_data(room_id):
         )
         
         if not latest_data:
-            return jsonify({"error": f"No data found for room: {room_id}"}), 
+            # If no primary collection data is being stored
+            latest_data = water_data_collection.find_one(
+                {"room_id": room_id},
+                sort=[("timestamp", -1)]
+            )
+        
+            if not latest_data:
+
+                return jsonify({"error": f"No data found for room: {room_id}"}), 404
         
         # Conver ObjectId to string for serialisation
         latest_data["_id"] = str(latest_data["_id"])
-        
+
+        if room_id == "bathroom" and "flow_rate" not in latest_data:
+            # Tries to find the recent flow rate data in the water collection
+            water_data = water_data_collection.find_one(
+                {"room_id": room_id},
+                sort=[("timestamp", -1)]
+            )
+
+            if water_data and 'flow_rate' in water_data:
+                latest_data["flow_rate"] = water_data["flow_rate"]        
         return jsonify(latest_data)
     except Exception as e:
         logging.error(f"Error in room sensor data: {str(e)}")

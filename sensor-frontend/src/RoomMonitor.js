@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Spin, Empty, Badge, Typography } from 'antd';
-import { HomeOutlined, EnvironmentOutlined, ClockCircleOutlined } from '@ant-design/icons'
+import { HomeOutlined, EnvironmentOutlined, ClockCircleOutlined, DropboxOutlined } from '@ant-design/icons'
 import GaugeChart from 'react-gauge-chart';
 import apiService from './apiService';
 
 const { TabPane } = Tabs;
-const { Text, Title} = Typography
+const { Text, Title } = Typography
 
 const RoomMonitor = () => {
     const [rooms, setRooms] = useState([]);
@@ -154,6 +154,12 @@ const RoomMonitor = () => {
                                         style={{ marginLeft: '8px' }}
                                     />
                                 )}
+                                {roomData[room] && roomData[room].flow_rate > 10 && (
+                                    <Badge
+                                        status="processing"
+                                        style={{ marginLeft: '4px' }}
+                                    />
+                                )}
                             </div>
                         }
                         key={room}
@@ -183,7 +189,7 @@ const RoomMonitor = () => {
                                     <GaugeChart
                                         id={`temp-gauge-${room}`}
                                         nrOfLevels={20}
-                                        percent={roomData[room].temperature / 40}
+                                        percent={(roomData[room].temperature || 0) / 40}
                                         needleColor='#4CAF50'
                                         needleBaseColor="#4CAF50"
                                         colors={['#C8E6C9', '#81C784', '#4CAF50']}
@@ -200,17 +206,18 @@ const RoomMonitor = () => {
                                                 color: '#388E3C'
                                             }}
                                         >
-                                            {roomData[room].temperature.toFixed(1)} C
+                                            {roomData[room]?.temperature !== undefined ?
+                                                roomData[room].temperature.toFixed(1) : "N/A"} C
                                         </Title>
                                         <Text
                                             type={
-                                                roomData[room].temperature > 25 ? "warning" :
-                                                    roomData[room].temperature < 18 ? "secondary" :
+                                                roomData[room]?.temperature > 25 ? "warning" :
+                                                    roomData[room]?.temperature < 18 ? "secondary" :
                                                         "success"
                                             }
                                         >
-                                            {roomData[room].temperature > 25 ? "High" :
-                                                roomData[room].temperature < 18 ? "Low" :
+                                            {roomData[room]?.temperature > 25 ? "High" :
+                                                roomData[room]?.temperature < 18 ? "Low" :
                                                     "Optimal"}
                                         </Text>
                                     </div>
@@ -231,9 +238,9 @@ const RoomMonitor = () => {
                                     }}
                                 >
                                     <GaugeChart
-                                        id={`temp-gauge-${room}`}
+                                        id={`humidity-gauge-${room}`}
                                         nrOfLevels={20}
-                                        percent={roomData[room].humidity / 40}
+                                        percent={(roomData[room].humidity || 0) / 100}
                                         needleColor='#4CAF50'
                                         needleBaseColor="#4CAF50"
                                         colors={['#C8E6C9', '#81C784', '#4CAF50']}
@@ -250,19 +257,100 @@ const RoomMonitor = () => {
                                                 color: '#388E3C'
                                             }}
                                         >
-                                            {roomData[room].humidity.toFixed(1)}%
+                                            {roomData[room]?.humidity !== undefined ?
+                                                roomData[room].humidity.toFixed(1) : "N/A"}%
                                         </Title>
                                         <Text
                                             type={
-                                                roomData[room].humidity > 70 ? "warning" :
-                                                    roomData[room].humidity < 30 ? "secondary" :
+                                                roomData[room]?.humidity > 70 ? "warning" :
+                                                    roomData[room]?.humidity < 30 ? "secondary" :
                                                         "success"
                                             }
                                         >
-                                            {roomData[room].humidity > 70 ? "High" :
-                                                roomData[room].humidity < 30 ? "Low" :
+                                            {roomData[room]?.humidity > 70 ? "High" :
+                                                roomData[room]?.humidity < 30 ? "Low" :
                                                     "Optimal"}
                                         </Text>
+                                    </div>
+                                </Card>
+                                <Card
+                                    title={
+                                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                                            <DropboxOutlined style={{ marginRight: '8px' }} />
+                                            <span>Water Flow</span>
+                                        </div>
+                                    }
+                                    style={{
+                                        flex: 1,
+                                        minWidth: '250px',
+                                        borderRadius: '8px',
+                                        borderColor: '#AED581',
+                                    }}
+                                    headStyle={{
+                                        backgroundColor: '#8BC34A',
+                                        color: 'white',
+                                        borderTopLeftRadius: '8px',
+                                        borderTopRightRadius: '8px'
+                                    }}
+                                >
+                                    <div style={{
+                                        height: '200px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'center'
+
+                                    }}>
+                                        <Title
+                                            level={2}
+                                            style={{
+                                                margin: 0,
+                                                color: '#1976D2',
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            {(roomData[room]?.flow_rate !== undefined && roomData[room]?.flow_rate !==null) ?
+                                                parseFloat(roomData[room].flow_rate).toFixed(1) : "N/A"} L/min
+
+                                        </Title>
+                                        <div style={{ margin: '20px 0', padding: '0 10px' }}>
+                                            <div style={{
+                                                marginBottom: '10px',
+                                                display: 'flex',
+                                                justifyContent: 'space-between'
+                                            }}>
+                                                <Text>0 L/min</Text>
+                                                <Text>10 L/min</Text>
+                                                <Text>20 L/min</Text>
+                                            </div>
+                                            <div style={{
+                                                height: '24px',
+                                                backgroundColor: '#E3F2FD',
+                                                borderRadius: '12px',
+                                                overflow: 'hidden',
+                                                border: '1px solid #BBDEFB'
+                                            }}>
+                                                <div style={{
+                                                    width: `${Math.min(100, ((roomData[room]?.flow_rate != null ? roomData[room].flow_rate : 0) / 20 * 100))}%`,
+                                                    height: '100%',
+                                                    backgroundColor: (roomData[room]?.flow_rate != null && roomData[room]?.flow_rate > 10) ? '#FF9800' : '#2196F3',
+                                                    borderRadius: '12px',
+                                                    transition: 'width 0.5s ease'
+                                                }}>
+
+                                                </div>
+                                            </div>
+                                            <Text
+                                                style={{ textAlign: 'center', marginTop: '10px', display: 'block' }}
+                                                type={
+                                                    roomData[room]?.flow_rate > 10 ? "warning" :
+                                                        roomData[room]?.flow_rate > 0 ? "processing" :
+                                                            "success"
+                                                }
+                                            >
+                                                {roomData[room]?.flow_rate > 10 ? "High Usage" :
+                                                    roomData[room]?.flow_rate > 0 ? "Active" : "No Flow"}
+                                            </Text>
+                                        </div>
                                     </div>
                                 </Card>
                                 <Card
@@ -296,32 +384,42 @@ const RoomMonitor = () => {
 
                                             <Badge
                                                 status={
-                                                    roomData[room].temperature > 25 ||
-                                                        roomData[room].temperature < 18 ||
-                                                        roomData[room].humidity > 70 ||
-                                                        roomData[room].humidity < 30 ?
+                                                    roomData[room]?.temperature > 25 ||
+                                                        roomData[room]?.temperature < 18 ||
+                                                        roomData[room]?.humidity > 70 ||
+                                                        roomData[room]?.humidity < 30 ||
+                                                        roomData[room]?.flow_rate > 10 ?
                                                         "warning" : "success"
                                                 }
                                                 style={{ marginRight: '8px' }}
                                             />
                                             <Text>
                                                 Overall Status: {
-                                                    roomData[room].temperature > 25 ||
-                                                        roomData[room].temperature < 18 ||
-                                                        roomData[room].humidity > 70 ||
-                                                        roomData[room].humidity < 30 ?
+                                                    roomData[room]?.temperature > 25 ||
+                                                        roomData[room]?.temperature < 18 ||
+                                                        roomData[room]?.humidity > 70 ||
+                                                        roomData[room]?.humidity < 30 ||
+                                                        roomData[room]?.flow_rate > 10 ?
                                                         "Needs Attention" : "Optimal"
                                                 }
                                             </Text>
                                         </div>
                                         <div style={{ margin: '8px 0' }}>
                                             <ClockCircleOutlined style={{ marginRight: '8px', color: '#388E2C' }} />
-                                            <Text>Last Updated: {new Date(roomData[room].timestamp).toLocaleString()}</Text>
+                                            <Text>Last Updated: {roomData[room]?.timestamp ?
+                                                new Date(roomData[room].timestamp).toLocaleString() : "N/A"}</Text>
                                         </div>
+                                        {roomData[room]?.flow_rate > 0 && (
+                                            <div style={{ margin: '8px 0'}}>
+                                                <DropboxOutlined style={{ marginRight: '8px', color: '#1976D2'}} />
+                                                <Text type={roomData[room]?.flow_rate > 10 ? "warning" : "processing"}>
+                                                    Water is currently flowing at {roomData[room].flow_rate.toFixed(1)} L/min
+                                                </Text>
+                                            </div>
+                                        )}
                                     </div>
                                 </Card>
                             </div>
-
 
                         ) : (
                             <div style={{ textAlign: 'center', padding: '20px' }}>
