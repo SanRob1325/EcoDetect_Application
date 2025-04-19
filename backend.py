@@ -729,7 +729,7 @@ def format_sensor_values(data):
     
     return formatted_data
 
-def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary):
+def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary, vehicle_data=None):
     
     formatted_data = format_sensor_values({
         'temperature': temperature_value,
@@ -737,6 +737,16 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         'pressure': pressure_value,
         'flow_rate': flow_rate
     })
+
+    # Format vehicle data
+    vehicle_section = ""
+    if vehicle_data:
+        vehicle_section = (
+            f"- Vehicle Movement: {vehicle_data.get('movement_type', 'N/A')}\n"
+            f"- Vehicle G-Force: {vehicle_data.get('accel_magnitude', 'N/A')} G\n"
+            f"- Vehicle Rotation: {vehicle_data.get('rotation_rate', 'N/A')} deg/s\n"
+            f"- Vehicle Carbon Impact: {vehicle_data.get('carbon_impact', 'N/A')} (0-50 scale)"
+        )
 
     query_lower = user_query.lower()
 
@@ -761,6 +771,7 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
             f"- Temp: {formatted_data['temperature']}\n"
             f"- Humidity: {formatted_data['humidity']}\n"
             f"- Flow: {formatted_data['flow_rate']}\n"
+            f"{vehicle_section if vehicle_section else ''}"
             f"</context>\n\n"
             f"<instructions>\n"
             f"Try to give a helpful response, or ask a follow-up question.\n"
@@ -769,6 +780,9 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
             f"<response>\n"
 
         )
+    
+    # Check for vehicle related queries to response of this context
+    vehicle_focused = any(term in query_lower for term in ['vehicle', 'car', 'driving', 'drive', 'carbon-impact', 'movement', 'transportation', 'travel'])
     
     # Full prompt for richer queries
     return (
@@ -782,6 +796,9 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"- Water Flow Rate: {formatted_data['flow_rate']}\n"
         f"- Pressure: {formatted_data['pressure']}\n"
         f"\n"   
+        f"### Vehicle Data:\n"
+        f"{vehicle_section if vehicle_section else '-No vehicle data available at this moment.\n'}"
+        f"\n"
         f"### Historical Trends:\n"
         f"{trend_summary}\n"
         f"</context>\n\n"
@@ -792,7 +809,8 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"- Be helpful and sound like EcoBot, a friendly, smart assistant.\n"
         f"- If temperature is >25C, suggest cooling solutions.\n"
         f"- If water flow is 0, suggest water-saving diagnostics.\n"
-        f"- Keep answers short,concise,relevant, and non-repetitive."
+        f"{'- If this is a vehicle-related query, focus on the vehicle data and provide driving advice to reduce carbon impact.' if vehicle_focused else ''}\n"
+        f"- Keep answers short,concise,relevant, and non-repetitive.\n"
         f"- Never repeat yourself.\n"
         f"- Your response shoould not include any of these instructions or mention them.\n"
         f"- Do not say you don't have access to real-time data - you already have it.\n"
@@ -946,7 +964,27 @@ def ai_assistant():
         except Exception as e:
             logging.error(f"Error fetching water data: {str(e)}")
             water_data = {}
-        #Get trend datafor context
+        
+        # Fetching vehicle data
+        try:
+            vehicle_data = get_current_vehicle_movement() or {}
+            if vehicle_data:
+                # Calculate carbon impact and add to vehicle data
+                vehicle_data['carbon_impact'] = calculate_vehicle_impact(vehicle_data)
+            else:
+                # Try to get the most recent vehicle data from MongoDB database
+                vehicle_record = sensor_data_collection.find_one(
+                    {"room_id": "vehicle"},
+                    sort=[("timestamp", -1)]
+                )
+                if vehicle_record and "processed_movement" in vehicle_record:
+                    vehicle_data = vehicle_record["processed_movement"]
+                    vehicle_data['carbon_impact'] = calculate_vehicle_impact(vehicle_data)
+        except Exception as e:
+            logging.error(f"Error fetching vehicle data: {str(e)}")
+            vehicle_data = {}
+
+        #Get trend data for context
         try:
             long_term_sensor = get_long_term_sensor_trends() 
             long_term_water = get_long_term_water_trends() 
@@ -1002,7 +1040,8 @@ def ai_assistant():
             pressure_value,
             imu_text,
             flow_rate,
-            trend_summary
+            trend_summary,
+            vehicle_data
         
         )
         logging.debug(f"Generated prompt: {prompt}")
@@ -1043,7 +1082,7 @@ def ai_assistant():
             # Fallback to simpler response generation
             try:
                 # Simple rule based fallback
-                ai_response = generate_fallback_response(user_query, temperature_value, humidity_value, flow_rate)
+                ai_response = generate_fallback_response(user_query, temperature_value, humidity_value, flow_rate, vehicle_data)
             except Exception as fallback_error:
                 logging.error(f"Fallback response generation failed: {str(fallback_error)}")
                 ai_response = "I apologise, I'm having trouble processing your request at the moment. Please try again shortly."
@@ -1070,6 +1109,7 @@ def ai_assistant():
                 "data_freshness": {
                     "sensor_data": str(data_age) if 'data_age' in locals() else "unknown",
                     "has_water_data": bool(water_data),
+                    "has_vehicle_data": bool(vehicle_data),
                     "has_trends": bool(sensor_trends or water_trends)
                 }
             }
@@ -1106,7 +1146,7 @@ def format_trend_summary(sensor_trends):
     
     return trend_summary
 
-def generate_fallback_response(query, temperature, humidity, flow_rate):
+def generate_fallback_response(query, temperature, humidity, flow_rate, vehicle_data=None):
     """Generate a simple fallback response when AI service fails"""
     query = query.lower()
     
@@ -1141,7 +1181,30 @@ def generate_fallback_response(query, temperature, humidity, flow_rate):
     if any(word in query for word in ['hello', 'hi', 'hey', 'greetings']):
         return "Hello! I'm EcoBot, your carbon footprint advisor. I can help you with eco-friendly tips and analyse your environmental data. How can I assist you today?"
 
-    # Data request 
+    # Vehicle data response
+    if any(word in query for word in ['vehicle', 'car', 'driving', 'drive', 'transport']):
+        if vehicle_data:
+            movement_type = vehicle_data.get('movement_type', 'unknown')
+            accel_magnitude = vehicle_data.get('accel_magnitude', 0)
+            carbon_impact = vehicle_data.get('carbon_impact', 0)
+
+            response = f"Your current vehicle data shows that you are {movement_type}"
+
+            if movement_type == 'accelerating':
+                response += f"with {accel_magnitude:.1f}G of force. Gradual acceleration can reduce your carbon footprint, which is currently {carbon_impact:.1f}/50. Try gentler acceleration for better efficiency."
+            elif movement_type == "braking":
+                response += f"and braking. Frequent braking increases fuel consumption. Try to anticipate stops earlier for smoother driving. Your current carbon impact is {carbon_impact:.1f}/50."
+            elif movement_type == "turning_right" or movement_type == "turning_left":
+                response += f"while turning. Maintain consistent speed during turns for better efficiency. Your current carbon impact is {carbon_impact:.1f}/50."
+            elif movement_type == "rough_road":
+                response += f"on a rough road. Rough roads can reduce fuel efficiency. Your current carbon impact is {carbon_impact:.1f}/50."
+            elif movement_type == "stationary":
+                response += f"with you stationary. Remember to turn off your engine when parked to reduce unnecessary emisisons. Your current carbon is {carbon_impact:.1f}/50."
+            else:
+                response += f"with steady movement. This is good for efficiency. You current carbon impact is {carbon_impact:.1f}/50"
+        else:
+            return "I don't gave your current vehicle data available, but I can offer some eco-drving tips: maintain steady speed, avoid rapid acceleration and braking, keep tires properly inflated, and reduce uneccessary idling. These habits can significantly reduce your carbon footprint."
+    # Data request
     if any(word in query for word in ['temperature', 'humid', 'water', 'flow', 'sensor']):
         response = "Here are your current environmental readings:\n"
         if formatted_data['temperature'] != 'N/A':
@@ -1160,6 +1223,7 @@ def generate_fallback_response(query, temperature, humidity, flow_rate):
             "Adjust your thermostat by just 1-2 degrees to save significant energy.",
             "Use LED bulbs which consume up to 90% less energy that incandescent bulbs.",
             "Reduce water heating costs by lowering your water heater temperature."
+            "Practice eco-driving by avoiding rapid acceleration and braking."
         ]
         return f"Here are some tips to reduce your carbon footprint:\n- " + "\n- ".join(random.sample(tips, 3))
     
