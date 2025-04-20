@@ -762,7 +762,7 @@ def format_sensor_values(data):
     
     return formatted_data
 
-def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary, vehicle_data=None):
+def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary, vehicle_data=None, room_context=""):
     
     formatted_data = format_sensor_values({
         'temperature': temperature_value,
@@ -838,6 +838,7 @@ def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_
         f"\n"
         f"### Historical Trends:\n"
         f"{trend_summary}\n"
+        f"{room_context}\n"
         f"</context>\n\n"
         f"<instructions>\n"
         f"- Never say you don't have access to sensor data - it is provided above.\n"
@@ -951,7 +952,7 @@ def format_sensor_values(data):
 # Using Titan Amazon AI agent
 @app.route('/api/ai-assistant', methods=['POST'])
 def ai_assistant():
-    """Generates suggestions for eco friendly matierals using OpenAI"""
+    """Generates suggestions for eco friendly matierals using AWS Bedrock"""
     try:
         # Start performance timer 
         start_time = time.time()
@@ -960,6 +961,10 @@ def ai_assistant():
         user_query = data.get('query', '').strip()
         user_id = data.get('user_id', 'anonymous')
         user_location = data.get('location', 'Unknown')
+
+        # Extract room data if provided
+        rooms_data = data.get('rooms', [])
+        room_context = ""
         
         if not user_query:
             return jsonify({"error": "Query cannot be empty"}), 400
@@ -970,10 +975,28 @@ def ai_assistant():
             "query": user_query,
             "timestamp": datetime.now(),
             "location": user_location,
-            "status": "processing"
+            "status": "processing",
+            "rooms": [room.get('room_id') for room in rooms_data] if rooms_data else []
         }
         log_id = query_logs_collection.insert_one(query_log).inserted_id
-        
+
+        if rooms_data:
+            room_context = "\n### Room-Specific Data:\n"
+            for room_item  in rooms_data:
+                room_id = room_item.get('room_id', "unknown")
+                room_data = room_item.get('data', {})
+
+                if room_data:
+                    room_context += f"\n## {room_id.capitalize()} Room:\n" 
+                    if 'temperature' in room_data:
+                        room_context += f"- Temperature: {format_value(room_data.get('temperature'))}°C\n"
+                    if 'humidity' in room_data:
+                        room_context += f"- Humidity: {format_value(room_data.get('humidity'))}%\n"
+                    if 'flow_rate' in room_data:
+                        room_context += f"- Water Flow: {format_value(room_data.get('flow_rate'))} L/min\n"
+                    if 'pressure' in room_data:
+                        room_context += f"- Pressure: {format_value(room_data.get('pressure'))} hPa\n"
+
         # Fetch real-time sensor data with error handling
         try:
             sensor_data = sensor_data_collection.find_one(sort=[("timestamp", -1)]) or {}
@@ -1077,7 +1100,8 @@ def ai_assistant():
             imu_text,
             flow_rate,
             trend_summary,
-            vehicle_data
+            vehicle_data,
+            room_context
         
         )
         logging.debug(f"Generated prompt: {prompt}")
@@ -1154,7 +1178,16 @@ def ai_assistant():
         logging.error("Error in AI Assistant endpoint", exc_info=True)
         return jsonify({"error":f"Failed to process request: {str(e)}"}),500
 
+def format_value(value):
+    """Format a value with proper rounding if it's a number"""
+    if value is None:
+        return "N/A"
 
+    try:
+        return f"{float(value):.1f}"
+    except (ValueError, TypeError):
+        return str(value)
+    
 def format_trend_summary(sensor_trends):
     """Format trend summary with proper rounding"""
     trend_summary = ""
