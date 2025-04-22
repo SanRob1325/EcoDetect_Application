@@ -1,0 +1,41 @@
+# Web Framework
+flask
+flask-cors
+
+# AWS SDK
+boto3
+botocore
+
+# AWS IoT SDK
+AWSIoTPythonSDK
+
+# Database Clients
+pymongo
+python-dotenv
+
+# JWT and Cognito Auth
+python-jose
+requests
+
+# Data Processing
+pandas
+numpy
+scikit-learn
+statsmodel
+
+# PDF and Reports
+matplotlib
+
+# Testing
+pytest
+pytest-cov
+unittest2
+
+# For mocking in tests
+mock
+
+# ObjectID in JSON responses for MongoDB
+bson
+
+# Other utilities
+python-dateutil

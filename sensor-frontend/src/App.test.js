@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-// Mock dependencies comprehensively
+// Mock dependencies 
 jest.mock('antd', () => ({
   Dropdown: ({ children }) => <div data-testid="mock-dropdown">{children}</div>,
   Layout: {
