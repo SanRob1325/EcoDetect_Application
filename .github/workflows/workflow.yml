@@ -31,6 +31,7 @@ jobs:
     
     - name: Run Backend Tests
       run: |
+        cd  EcoDetect_Application
         python -m pytest --cov=. --cov-report=xml
     
     # Frontend Tests
@@ -40,7 +41,7 @@ jobs:
         node-version: '16'  
     - name: Install dependencies
       run: | 
-        cd sensor-frontend
+        cd EcoDetect_Application/sensor-frontend
         npm install
     - name: Run Frontend Tests
       run: |
@@ -70,11 +71,11 @@ jobs:
 
     - name: Install Frontend Dependencies
       run: |
-        cd sensor-frontend
+        cd EcoDetect_Application/sensor-frontend
         npm run build
     - name: Create PWA manifest and service worker
       run: |
-        cd sensor-frontend
+        cd EcoDetect_Application/sensor-frontend
         # Create manifest.json for PWA
         echo '{
         "short_name": "EcoDetect",
@@ -124,50 +125,54 @@ jobs:
         path: sensor-frontend.zip
   
   deploy-dev:
-    runs-on: ubuntu-latest
+    name: Deploy to EC2
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    environment: development
-
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'  && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') 
     steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v3
+    - name: Download backend artifacts
+      uses: actions/download-artifact@v2
       with: 
-        name: backend-code
-        path: ./
+        name: backend
 
-    - name: Download frontend build
-      uses: actions/download-artifact@v3
+    - name: Download frontend artifact
+      uses: actions/download-artifact@v2
       with:
-        name: frontend-build
-        path: ./sensor-frontend/build
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v1
+        name: sensor-frontend
+        
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-1 
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        known_hosts: ${{ secrets.KNOWN_HOSTS }}
 
     - name: Deploy to AWS EC2 
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.DEV_HOST }}
-        username: ${{ secrets.DEV_USERNAME }}
-        key: ${{ secrets.DEV_SSH_KEY }}
-        source: "./"
-        target: "/var/www/ecodetect"     
+      run: |
+        # Transfer files
+        scp backend.zip ${{ secrets.EC2_USER}}@${{ secrets.EC2_HOST }}:~/
+        scp sensor-frontend.zip ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST}}:~/
 
-    - name: Restart Services
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.DEV_HOST }}
-        username: ${{ secrets.DEV_USERNAME }}
-        key: ${{ secrets.DEV_SSH_KEY }}
-        script: |
-          cd /var/www/ecodetect
-          sudo systemctl restart ecodetect-backend
-          sudo systemctl restart nginx
+        # Deploy commands
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2__HOST }} << 'EOL'
+          # stop services
+          sudo systemctl stop ecodetect-backend || true
+          
+          # Backup previous deployment
+          timestamp=$(date +%Y%m%d%H%M%S)
+          mkdir -p ~/backups/$timestamp/
+
+          if [ -d ~/backend ]; then
+            cp -r ~/backend ~backups/$timestamp/
+          fi
+
+          if [ -d ~/sensor-frontend-build ]; then
+            cp -r ~/sensor-frontend-build ~/backups/$timestamps/
+          fi
+
+          # Deploy backend
+          rm -rf ~/backend
+          mkdir -p ~/backend
+          unzip -o ~/backend.zip -d ~/backend
     
     
   deploy-prod:
