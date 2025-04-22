@@ -30,9 +30,7 @@ jobs:
         pip install pytest pytest-cov
     
     - name: Run Backend Tests
-      run: |
-        cd  EcoDetect_Application
-        python -m pytest --cov=. --cov-report=xml
+      run: python -m pytest --cov=. --cov-report=xml
     
     # Frontend Tests
     - name: Setup Node.js
@@ -45,7 +43,7 @@ jobs:
         npm install
     - name: Run Frontend Tests
       run: |
-        cd sensor-frontend
+        cd EcoDetect_Application/sensor-frontend
         npm test -- --coverage
 
     # Upload coverage
