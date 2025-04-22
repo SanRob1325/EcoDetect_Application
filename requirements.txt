@@ -21,7 +21,7 @@ requests
 pandas
 numpy
 scikit-learn
-statsmodel
+statsmodels
 
 # PDF and Reports
 matplotlib
