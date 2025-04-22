@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from sense_hat import SenseHat
 from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
+import pymongo
 import logging
 from alert_service import AlertService
 from reports import report_routes
@@ -54,7 +55,8 @@ query_logs_collection = db.query_logs
 CERTIFICATE_PATH = os.getenv("CERTIFICATE_PATH")
 PRIVATE_KEY_PATH = os.getenv("PRIVATE_KEY_PATH")
 ROOT_CA_PATH = os.getenv("ROOT_CA_PATH")
-
+ALERT_TABLE_NAME = os.getenv("ALERT_TABLE", "Alerts")
+alert_table = dynamodb.Table(ALERT_TABLE_NAME)
 #AWS SNS setup for sending alerts
 SNS_TOPIC_ARN= os.getenv("SNS_TOPIC_ARN")
 SES_EMAIL_RECIPIENT = os.getenv("SES_EMAIL_RECIPIENT")
@@ -228,7 +230,7 @@ def auth_middleware():
     # Add additional debug logging
     logging.debug(f"Validating token for path: {request.path}")
     
-    valid, claims = verify_token(token)
+    valid, claims = verify_token(token) if isinstance(verify_token(token), tuple) else (True, verify_token(token))
 
     if not valid:
         logging.warning(f"Invalid token for {request.path}")
@@ -237,8 +239,7 @@ def auth_middleware():
     # Store user info in the request context
     g.user = {
         "user_id": claims.get('sub', 'unknown'),
-        "email": claims.get('email', 'unknown'),
-        "name": claims.get('name', 'User')
+        "email": claims.get('email', 'unknown')
     }
     
     logging.debug(f"User {g.user['email']} authenticated for {request.path}")
@@ -1360,16 +1361,28 @@ def get_historical_data():
                 data_type: 1,
                 "_id": 0
             }
-        ).sort("timestamp", 1)
+        )
 
+        # Check if a cursor is already a list
+        if isinstance(cursor, list):
+            # Note - cursors can already be in a list for tests
+            records = cursor
+        else:
+            # Deployment puposes needs to get data from the cursor
+            records = list(cursor)
         # Process the data
         historical_data = []
-        for record in cursor:
+        for record in records:
             if data_type in record and record[data_type] is not None:
                 try:
                     value = float(record[data_type])
+                    # Check if the timestamp is a string or needs to be converted to a string
+                    timestamp = record["timestamp"]
+                    if isinstance(timestamp, datetime):
+                        timestamp = timestamp.isoformat()
+                        
                     historical_data.append({
-                        "timestamp": record["timestamp"].isoformat(),
+                        "timestamp": timestamp,
                         "value": round(value, 2)
                     })
                 except (ValueError, TypeError):
@@ -1770,9 +1783,27 @@ def predictive_analysis():
             try:
                 # Query MongoDB for data
                 if data_type == 'flow_rate':
-                    mongo_data = list(water_data_collection.find().sort("timestamp", -1).limit(100))
+                    # Get cursor or list from MongoDB
+                    cursor = water_data_collection.find()
+                    # Check if cursor is already in the in a list
+                    if isinstance(cursor, list):
+                        mongo_data = cursor
+                    else:
+                        mongo_data = list(cursor.sort("timestamp", -1).limit(100)) 
                 else:
-                    mongo_data = list(sensor_data_collection.find().sort("timestamp", -1).limit(100))    
+                    # Getting cursor or list from MongoDB
+                    cursor = sensor_data_collection.find()
+
+                    # Check if the cursor is already on a list
+                    if isinstance(cursor, list):
+                        mongo_data = cursor
+                        # Sort the list in in python
+                        mongo_data = sorted(mongo_data, key=lambda x:x["timestamp"], reverse=True)   
+                    else:
+                        mongo_data = list(cursor.limit(100))
+                        # Sorts after retrieving from MongoDB
+                        mongo_data = sorted(mongo_data, key=lambda x:x["timestamp"], reverse=True)
+
                 logging.info(f"Retrieved {len(mongo_data)} records from MongoDB")    
                 
                 for item in mongo_data:
@@ -2122,25 +2153,22 @@ def debug_alert_service():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
  
-@app.route('/api/force-test-alert-dynamodb', methods=['GET'])
-def force_test_alert_dynamodb():
+@app.route('/api/force-create-alert-dynamodb', methods=['GET'])
+def force_create_alert_dynamodb():
     try:
         # Test data that exceeds temperature threshold
         test_data = {
-            "device_id": "TestDevice",
-            "timestamp": datetime.now().isoformat(),
-            "temperature": 40,  # Exceeds threshold of 30
-            "humidity": 45,
-            "location": "DynamoDB Alert Test"
+            "temperature": 30, # Triggers high temperature
+            "humidity": 90, # Triggers high humidity
+            "location": "Test Location"
         }
-        
         # Create an alert item for DynamoDB
-        alert_item = {
+        alert_record = {
             "id": f"alert-{datetime.now().timestamp()}",
-            "device_id": test_data["device_id"],
-            "timestamp": test_data["timestamp"],
+            "timestamp": datetime.now().isoformat(), # The current time
+            "device_id": "TestDevice",
             "sensor_data": test_data,
-            "exceeded_thresholds": ["temperature_high"],
+            "exceeded_thresholds": ["temperature_high", "humidity_high"],
             "severity": "critical",
             "processed": True
         }
@@ -2150,12 +2178,11 @@ def force_test_alert_dynamodb():
         alert_table = dynamodb.Table(alert_table_name)
         
         # Store the alert in DynamoDB
-        response = alert_table.put_item(Item=alert_item)
+        response = alert_table.put_item(Item=alert_record)
         
         return jsonify({
-            "success": True,
-            "message": "Test alert created in DynamoDB",
-            "alert_id": alert_item["id"],
+            "message": "Test alert created directly in DynamoDB",
+            "alert": alert_record,
             "dynamodb_response": str(response)
         })
     except Exception as e:
@@ -2163,34 +2190,14 @@ def force_test_alert_dynamodb():
     
 @app.route('/api/alerts-dynamodb', methods=['GET'])
 def get_alerts_dynamodb():
-    try:
-        alert_table_name = os.getenv("ALERT_TABLE", "Alerts")
-        alert_table = dynamodb.Table(alert_table_name)
-        
-        # Query for recent alerts - without ScanIndexForward
-        response = alert_table.scan(
-            Limit=10
-        )
-        
-        alerts = response.get('Items', [])
-        
-        # Format alerts for the frontend
-        formatted_alerts = []
-        for alert in alerts:
-            formatted_alert = {
-                "id": alert.get("id", ""),
-                "timestamp": alert.get("timestamp", ""),
-                "device_id": alert.get("device_id", ""),
-                "exceeded_thresholds": alert.get("exceeded_thresholds", []),
-                "severity": alert.get("severity", "unknown"),
-                "sensor_data": alert.get("sensor_data", {})
-            }
-            formatted_alerts.append(formatted_alert)
-            
-        return jsonify(formatted_alerts)
-    except Exception as e:
-        logging.error(f"Error in /api/alerts-dynamodb: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        try:  
+            # Query for recent alerts
+            response = alert_table.scan()
+            alerts = response.get('Items', [])          
+            return jsonify(alerts)
+        except Exception as e:
+            logging.error(f"Error in /api/alerts-dynamodb: {str(e)}")
+            return jsonify({"error": str(e)}), 500
     
 @app.route('/api/debug-check-thresholds', methods=['GET'])
 def debug_check_thresholds():

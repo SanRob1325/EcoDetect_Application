@@ -171,11 +171,13 @@ def fetch_sensor_data_from_s3(start_date, end_date, data_types):
         content = response['Body'].read().decode('utf-8')
         df = pd.read_csv(StringIO(content))
         
-        # Conver timestamp strings to datetime objects
+        # Convert timestamp strings to datetime objects
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         
+        start_date_np = pd.to_datetime(start_date)
+        end_date_np = pd.to_datetime(end_date)
         # Filter data by date range
-        filtered_df = df[(df['timestamp'] >= start_date) & (df['timestamp'] <= end_date)]
+        filtered_df = df[(df['timestamp'] >= start_date_np) & (df['timestamp'] <= end_date_np)]
         
         if filtered_df.empty:
             logger.warning(f"No sensor data found in S3 for period {start_date} to {end_date}")
@@ -327,12 +329,13 @@ def find_anomalies(data, field, threshold=2.0):
     values = []
     
     for item in data:
-        try:
-            value = float(item.get(field, 0))
-            values.append(value)
-        except (TypeError, ValueError):
-            continue
-        
+        if field in item and item[field] is not None:
+            try:
+                value = float(item[field])
+                values.append(value)
+            except (TypeError, ValueError):
+                continue
+    
     if len(values) < 3:
         # Need at least 3 data points
         return []
@@ -340,21 +343,25 @@ def find_anomalies(data, field, threshold=2.0):
         mean = sum(values) / len(values)
         variance = sum((x- mean) ** 2 for x in values) / len(values)
         std_dev = variance ** 0.5
-    
+
+        # Avoids division by zer
+        if std_dev == 0:
+            return []
+        
         anomalies = []
         for item in data:
-            try:
-                if field in item:
-                    z_score = abs(item[field] - mean) / std_dev
+            if field in item and item[field] is not None:
+                try:
+                    value = float(item[field])
+                    z_score = abs(value - mean) / std_dev
                     if z_score > threshold:
                         anomalies.append({
                             "timestamp": item["timestamp"],
-                            "value": item[field],
+                            "value": value,
                             "z_score": z_score
                         })
-            except (TypeError, ValueError):
-                continue
-        
+                except (TypeError, ValueError):
+                    continue       
         return anomalies
     except Exception as e:
         logger.error(f"Error calculating anomalies: {str(e)}")
