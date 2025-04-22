@@ -125,9 +125,8 @@ const AppContent = () => {
   }
 
   // If not authenticated show the auth routes
-
   return (
-    <Router>
+    <>
       {!isAuthenticated ? (
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -219,15 +218,22 @@ const AppContent = () => {
           </Content>
         </Layout>
       )}
-    </Router >
+    </>
   )
 }
-//Navigation for the different pages
 
-const App = () => {
+const App = ({ useCustomRouter = false }) => {
+  // If useCustomRouter is true, don't include the Router component
+  // This allows tests to provide their own router (like MemoryRouter)
   return (
     <AuthProvider>
-      <AppContent />
+      {useCustomRouter ? (
+        <AppContent />
+      ) : (
+        <Router>
+          <AppContent />
+        </Router>
+      )}
     </AuthProvider>
   )
 }

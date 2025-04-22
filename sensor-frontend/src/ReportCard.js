@@ -4,7 +4,6 @@ import {FileTextOutlined, DownloadOutlined, LineChartOutlined} from '@ant-design
 import { useNavigate } from 'react-router-dom';
 
 const {Title, Paragraph} = Typography;
-const {Option} = Select;
 
 const ReportCard = ({style = {}}) => {
     const [quickReportVisible, setQuickReportVisible] = useState(false);
@@ -93,7 +92,7 @@ const ReportCard = ({style = {}}) => {
                 okButtonProps={{
                     style: { backgroundColor: '#4CAF50', borderColor: '#388E3C'}
                 }}
-                bodyStyle={{ backgroundColor: '#F1F8E9'}}
+                styles={{ backgroundColor: '#F1F8E9'}}
                 style={{ top: 20}}
             >
                 <Paragraph>
@@ -107,11 +106,13 @@ const ReportCard = ({style = {}}) => {
                         style={{width: '100%'}}
                         onChange={(value) => setTimeRange(value)}
                         dropdownStyle={{ backgroundColor: '#F1F8E9'}}
-                    >
-                        <Option value="daily">Daily (Last 24 hours)</Option>
-                        <Option value="weekly">Weekly (Last 7 days)</Option>
-                        <Option value="monthly">Monthly (Last 30 days)</Option>
-                    </Select>
+                        options={[
+                            {value: 'daily', label: 'Daily (Last 24 hours)'},
+                            {value: 'weekly', label: 'Weekly (Last 7 days)'},
+                            {value: 'monthly', label: 'Monthly (Last 30 days)'}
+                        ]}
+                    />
+                       
                 </div>
             </Modal>
         </Card>

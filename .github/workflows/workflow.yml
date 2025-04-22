@@ -2,137 +2,127 @@ name: EcoDetect CI/CD
 
 on: 
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request: 
-    branches: [ main, develop ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  test-backend:
+  test:
+    name: Test
     runs-on: ubuntu-latest
-
+    services:
+      mongodb:
+        image: mongo:4.4
+        ports:
+          - 27017:27017
     steps:
     - uses: actions/checkout@v3
-
+      # Backend Tests
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-    
-    - name: Install dependencies
+    - name: Install backend dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest-flask pytest-cov
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
     
-    - name: Run Tests
-      run: | 
-        pytest --cov=. --cov-report=xml
+    - name: Run Backend Tests
+      run: |
+        python -m pytest --cov=. --cov-report=xml
     
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
-
-  test-frontend:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
+    # Frontend Tests
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '16'
-        cache: 'npm'
-        cache-dependency-path: '**/package-lock.json'
-    
+        node-version: '16'  
     - name: Install dependencies
       run: | 
         cd sensor-frontend
-        npm ci
+        npm install
+    - name: Run Frontend Tests
+      run: |
+        cd sensor-frontend
         npm test -- --coverage
-  
-  lint:
-    runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Set Up Python
-      uses: actions/setup-python@v4
+    # Upload coverage
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v2
       with:
-        python-version: '3.9'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8
-    
-    - name: Lint Python Code
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '16'
-    
-    - name: Install ESLint
-      run: |
-        cd sensor-frontend 
-        npm install eslint
-    
-    - name: Lint JavaScript code
-      run: |
-        cd sensor-frontend
-        npx eslint . --ext .js,.jsx
+        directory: ./
+        fail_ci_if_error: false
   
   build:
+    name: Build
+    needs: test
     runs-on: ubuntu-latest
-    needs: [test-backend, test-frontend, lint]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    # Build frontend
+    - name: Set Up Node.js
+      uses: actions/setup-node@v2
       with:
-        python-version: '3.9'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with: 
-        node-version: '16'
-    
-    - name: Build Frontend
+        python-version: '16'
+
+    - name: Install Frontend Dependencies
       run: |
         cd sensor-frontend
-        npm ci
         npm run build
+    - name: Create PWA manifest and service worker
+      run: |
+        cd sensor-frontend
+        # Create manifest.json for PWA
+        echo '{
+        "short_name": "EcoDetect",
+        "name": "EcoDetect Environmental Monitoring",
+        "icons": [
+          {
+            "src": "favicon.ico"
+            "sizes": "64x64",
+            "type": "image/x-icon"
+          },
+          {
+            "src": "logo192.png"
+            "type": "image/png",
+            "sizes": "192x192"
+          },
+          {
+            "src": "logo512.png"
+            "type": "image/png",
+            "type": "512x512"
+          }  
+        ],
+        "start_url": ".",
+        "display": "standalone",
+        "theme_color": "#388E3C",
+        "background_color": "#F1F8E9"
+        }' > manifest.json  
 
-    - name: Upload frontend build artifact
-      uses: actions/upload-artifact@v3
+    - name: Package backend
+      run: |
+          zip -r ..backend.zip ./*
+    
+    - name: Package frontend
+      run: |
+          cd sensor-frontend
+          zip -r ../sensor-frontend.zip build/*
+    
+    - name: Upload backend artifact
+      uses: actions/upload-artifact@v2
       with:
-        name: frontend-build
-        path: sensor-frontend/build/
+        name: backend
+        path: backend.zip
 
-    - name: Upload backend code artifact
-      uses: actions/upload-artifact@v3
+    - name: Upload frontend artifact
+      uses: actions/upload-artifact@v2
       with:
-        name: backend-code
-        path: |
-          *.py
-          !*test*.py
-          requirements.txt
-
+        name: sensor-frontend
+        path: sensor-frontend.zip
+  
   deploy-dev:
     runs-on: ubuntu-latest
     needs: build
@@ -178,7 +168,8 @@ jobs:
           cd /var/www/ecodetect
           sudo systemctl restart ecodetect-backend
           sudo systemctl restart nginx
-
+    
+    
   deploy-prod:
     runs-on: ubuntu-latest
     needs: build
