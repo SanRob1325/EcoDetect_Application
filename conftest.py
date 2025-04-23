@@ -19,12 +19,6 @@ def client():
         yield client
 
 @pytest.fixture(autouse=True)
-def mock_boto_clients(monkeypatch):
-    dummy_client = MagicMock()
-    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: dummy_client)
-    return dummy_client
-
-@pytest.fixture(autouse=True)
 def mock_env(monkeypatch):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
@@ -37,3 +31,9 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("ROOT_CA_PATH2", "/tmp/dummy-ca.pem")
     monkeypatch.setenv("CI", "true")
 
+@pytest.fixture(autouse=True)
+def mock_boto_clients(monkeypatch):
+    dummy_client = MagicMock()
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: dummy_client)
+    monkeypatch.setattr("boto3.resource", lambda *args, **kwargs: MagicMock())
+    return dummy_client
