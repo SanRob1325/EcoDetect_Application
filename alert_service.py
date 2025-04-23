@@ -43,6 +43,15 @@ class AlertService:
         self._notification_preferences_cache = {}
         self._cache_expiry = 300 # in 5 minutes
         self._last_cache_update = 0
+
+    def get_alerts_history(self):
+        """Retrieve alert history from MongoDB or DynamoDB"""
+        try: 
+            if self.mongo_db:
+                return list(self.mongo_db.alert_history.find({}, {"_id": 0}))
+        except Exception as e:
+            logger.error(f"Error retrieving alerts: {str(e)}")
+        return []
         
     def check_thresholds(self, raw_data):
         """Check the sensor data against configured thresholds and trigger alerts if exceeded"""
