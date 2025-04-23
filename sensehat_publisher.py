@@ -49,7 +49,12 @@ try:
     
 except Exception as e: 
     logging.error(f"Failed to connect to AWS IoT Core: {str(e)}")
-    exit(1)
+
+    # Preventing crashes with CI build
+    if os.getenv("CI") == "true":
+        logging.warning("Skipping MQTT connection in CI environment")
+    else:
+        exit(1)
 
 sensor = SenseHat()
 TEMP_CORRECTION_FACTOR = -5.4
