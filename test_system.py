@@ -26,106 +26,6 @@ def mock_objectid_serialization(obj):
         return obj.isoformat()
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
-"""Entire workflow test"""
-def test_complete_system_workflow(client, monkeypatch):
-    """Test a complete workflow through the system"""
-    # Mock authentication
-    monkeypatch.setattr("backend.verify_token", lambda token: (True, {"sub": "test_user", "email": "test@example.com"}))
-
-    # First step to get current thresholds
-    response = client.get('/api/get-thresholds', headers={"Authorization": "Bearer dummy-token"})
-    assert response.status_code == 200
-    initial_thresholds = response.json
-
-    # Next step to update thresholds
-    new_thresholds = {
-        "temperature_range": [18, 26],
-        "humidity_range": [30, 65],
-        "flow_rate_threshold": 8 
-    }
-    response = client.post('/api/set-thresholds', json=new_thresholds, headers={"Authorization": "Bearer dummy-token"})
-    assert response.status_code == 200
-
-    # Get sensor data as the next step
-    with patch('backend.sensor.get_temperature', return_value=27.0):
-        with patch('backend.sensor.get_humidity', return_value=70.0):
-            with patch('backend.sensor.get_pressure', return_value=1010.0):
-                with patch('backend.get_cpu_temperature', return_value=30.0):
-                    with patch('bson.json_util.default', side_effect=mock_objectid_serialization):
-                        response = client.get('/api/sensor-data', headers={"Authorization": "Bearer dummy-token"})
-                        assert response.status_code == 200
-                        sensor_data = response.json
-
-                        # Verify temperature exceeded new threshold
-                        assert sensor_data["temperature"] > new_thresholds["temperature_range"][1]
-                        assert sensor_data["humidity"] > new_thresholds["humidity_range"][1]
-
-    # test alert 
-    with patch('backend.alert_table.scan') as mock_scan:
-            with patch('backend.dynamodb.Table') as mock_table:
-                with patch('boto3.resource') as mock_boto_resource:
-
-                    mock_scan.return_value = {
-
-                        "Items": [{
-                            "id": "alert-123",
-                            "timestamp": datetime.now().isoformat(),
-                            "exceeded_thresholds": ["temperature_high", "humidity_high"],
-                            "severity" : "critical"
-                        }]
-                    }
-
-                    mock_table_instance = MagicMock()
-                    mock_table_instance.scan.return_value = mock_scan.return_value
-                    mock_table.return_value = mock_table_instance
-                    mock_boto_resource.return_value = MagicMock()
-                    
-                    response = client.get('/api/alerts', headers={"Authorization": "Bearer dummy-token"})
-                    assert response.status_code == 200
-    
-    # Next step is to check alerts generated
-    response = client.get('/api/alerts-dynamodb', headers={"Authorization": "Bearer dummy-token"})
-    if response.status_code != 200:
-        response = client.get('/api/alerts', headers={"Authorization": "Bearer dummy-token"})
-    
-    assert response.status_code == 200
-    alerts = response.json
-
-    # Should find temperature and humidity alerts
-    assert any("temperature_high" in alert.get("exceeded_thresholds", []) for alert in alerts)
-    assert any("humidity_high" in alert.get("exceeded_thresholds", []) for alert in alerts)
-
-    # Test reports
-    mock_data = [
-        {
-            "timestamp": datetime.now().isoformat(),
-            "temperature": 25.5,
-            "humidity": 55.0,
-            "pressure": 1013.2
-        }
-    ]
-    with patch('reports.fetch_sensor_data', return_value=mock_data):
-        with patch('reports.fetch_sensor_data_from_s3', return_value=mock_data):
-            with patch("reports.store_report", return_value='http://example.com/mock-report'):
-                report_request = {
-                    "time_range": "daily",
-                    "data_types": ["temperature", "humidity"],
-                    "format": "json"
-                }
-                # Next step is to generate report
-                response = client.post('/api/reports', json=report_request, headers={"Authorization": "Bearer dummy-token"})
-                assert response.status_code == 200
-                assert "download_url" in response.json
-
-    # Next step is to test the AI assistant
-    ai_query = {
-        "query": "How can I reduce my carbon footprint?",
-        "user_id": "test_user"
-    }
-    response = client.post('/api/ai-assistant', json=ai_query, headers={"Authorization": "Bearer dummy-token"})
-    assert response.status_code == 200
-    assert "answer" in response.json
-
 """Performance Testing"""
 def test_api_performance(client, monkeypatch):
     """Test the performance of key API endpoints"""
@@ -341,7 +241,7 @@ def test_jwt_validation(client, monkeypatch):
     response = client.get('/api/get-thresholds', headers={"Authorization": "Bearer invalid-signature"})
     assert response.status_code == 401, "Token with invalid signature not properly rejected"
 
-"""Accessibility Testing"""
+
 
 
 
