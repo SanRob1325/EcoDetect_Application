@@ -60,7 +60,7 @@ def test_complete_system_workflow(client, monkeypatch):
                         assert sensor_data["humidity"] > new_thresholds["humidity_range"][1]
 
     # test alert 
-    with patch.object(app.alert_service, 'get_alerts_history') as mock_get_alerts:
+    with patch.object(alert_service, 'get_alerts_history') as mock_get_alerts:
             mock_get_alerts.return_value = {
                 "Items": [{
                     "id": "alert-123",
