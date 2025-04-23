@@ -58,7 +58,7 @@ class TestSystemIntegration:
                 assert len(response.json["exceeded_thresholds"]) > 0
         
         # Third step is to verify alerts are generated
-        with patch.object('backend.alert_table.scan') as mock_get_alerts:
+        with patch('backend.alert_table.scan') as mock_get_alerts:
             mock_get_alerts.return_value = {
                 "Items": [{
                     "id": "alert-123",
