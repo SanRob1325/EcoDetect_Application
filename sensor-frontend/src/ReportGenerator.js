@@ -4,10 +4,11 @@ import {Card, Form, Select, Button, Checkbox, DatePicker, message, Spin, Tabs, A
 import {DownloadOutlined, FileTextOutlined, MailOutlined, LineChartOutlined} from '@ant-design/icons';
 import moment from 'moment';
 
+
 const {Title, Text, Paragraph} = Typography;
 const { Option } = Select;
 const { RangePicker } = DatePicker;
-const {TabPane} = Tabs;
+
 
 const ReportGenerator = () => {
     const [form] = Form.useForm();
@@ -293,7 +294,7 @@ const ReportGenerator = () => {
                 >
                     {previewData ? (
                         <Tabs defaultActiveKey="summary">
-                            <TabPane tab="Summary" key="summary">
+                            <Tabs.TabPane tab="Summary" key="summary">
                                 <Title level={4}>Report Summary</Title>
                                 <Paragraph>
                                     <Text strong>Time Range:</Text> {timeRange === 'custom'
@@ -330,8 +331,8 @@ const ReportGenerator = () => {
                                         {formatPreviewStats(previewData.summary, 'water_usage')}
                                     </div>
                                 )}
-                            </TabPane>
-                            <TabPane tab="Anomalies" key="anomalies">
+                            </Tabs.TabPane>
+                            <Tabs.TabPane tab="Anomalies" key="anomalies">
                                 <Title level={4}>Detected Anomalies</Title>
                                 {previewData.anomalies && Object.keys(previewData.anomalies).length > 0 ? (
                                     Object.entries(previewData.anomalies).map(([dataType, anomalies]) => (
@@ -351,8 +352,8 @@ const ReportGenerator = () => {
                                 ) : (
                                     <Empty description="No anomalies detected in the selected time range" />       
                                 )}
-                            </TabPane>
-                            <TabPane tab="Alerts" key="alerts">
+                            </Tabs.TabPane>
+                            <Tabs.TabPane tab="Alerts" key="alerts">
                                 <Title level={4}>Alert History</Title>
                                 {previewData.alerts && previewData.alerts.length > 0 ? (
                                     previewData.alerts.map((alert, index) => (
@@ -367,7 +368,7 @@ const ReportGenerator = () => {
                                 ) : (
                                     <Empty description="No Alerts recorded in the selected time range" />
                                 )}
-                            </TabPane>
+                            </Tabs.TabPane>
                         </Tabs>
                     ) : (
                         <Spin tip="Loading preview data..." />

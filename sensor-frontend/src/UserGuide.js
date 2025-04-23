@@ -3,9 +3,6 @@ import { Card, Collapse, Typography, Divider, Steps, Button} from 'antd';
 import { QuestionCircleOutlined, SettingOutlined, BellOutlined, RobotOutlined, LineChartOutlined,CarOutlined, FileTextOutlined, DashboardOutlined, HomeOutlined} from '@ant-design/icons';
 
 const { Title, Paragraph, Text } = Typography;
-const { Panel } = Collapse;
-const { Step } = Steps;
-
 const UserGuide = () => {
     return(
         <Card
@@ -32,7 +29,7 @@ const UserGuide = () => {
                 <Title level={4} style={{ color: '#388E3C'}}>Welcome to the EcoDetect User Guide</Title>
                 <Paragraph>
                     This guide helps you navigate through all the features and capabilies of the EcoDetect application,
-                    enablin you to affectively monitor and reduce your environmental impact.
+                    enabling you to affectively monitor and reduce your environmental impact.
                 </Paragraph>
             </div>
 
@@ -45,7 +42,7 @@ const UserGuide = () => {
                     borderRadius: '8px'
                 }}
             >
-                <Panel
+                <Collapse.Panel
                     header={<Title level={5} style={{ margin: 0}}><DashboardOutlined /> Dashboard Overview</Title>}
                     key="1"
                     style={{
@@ -80,13 +77,13 @@ const UserGuide = () => {
                     </ul>
                     <Title level={5} style={{ color: '#388E3C', marginTop: '16px'}}> Using the Dashboard</Title>
                     <Steps direction="vertical" size="small" current={-1}>
-                        <Step title="View Real time Data" description="All gauges and charts update automatically every few seconds." />
-                        <Step title="Adjust Thresholds" description="Use the 'Preferred Ranges' section to set you environmental targets." />
-                        <Step title="Monitor Alerts" description="The system will notify you when readings exceed your thresholds" />
-                        <Step title="Analyse Trends" description="View historical data in the Temperature and CO2 Trends sections." />
+                        <Steps.Step title="View Real time Data" description="All gauges and charts update automatically every few seconds." />
+                        <Steps.Step title="Adjust Thresholds" description="Use the 'Preferred Ranges' section to set you environmental targets." />
+                        <Steps.Step title="Monitor Alerts" description="The system will notify you when readings exceed your thresholds" />
+                        <Steps.Step title="Analyse Trends" description="View historical data in the Temperature and CO2 Trends sections." />
                     </Steps>
-                </Panel>
-                <Panel
+                </Collapse.Panel>
+                <Collapse.Panel
                     header={<Title level={5} style={{margin: 0}}><SettingOutlined />Settings</Title>}
                     key="2"
                     style={{
@@ -109,8 +106,8 @@ const UserGuide = () => {
                     <Paragraph style={{ marginTop: '16px'}}>
                         Remember to click the "Save Settings" button after making any changes to apply you new preferences
                     </Paragraph>
-                </Panel>
-                <Panel
+                </Collapse.Panel>
+                <Collapse.Panel
                     header={<Title level={5} style={{ margin: 0}}><BellOutlined />Alerts</Title>}
                     key="3"
                     style={{
@@ -138,8 +135,8 @@ const UserGuide = () => {
                         <li>Email alerts</li>
                         <li>SMS messages</li>
                     </ul>
-                </Panel>
-                <Panel
+                </Collapse.Panel>
+                <Collapse.Panel
                     header={<Title level={5} style={{ marginTop: 0}}><RobotOutlined /> AI Assistant</Title>}
                     key="4"
                     style={{
@@ -154,10 +151,10 @@ const UserGuide = () => {
                     </Paragraph>
                     <Title level={5} style={{ color: '#388E3C'}}>Using the AI Assistant</Title>
                     <Steps direction="vertical" size="small" current={-1}>
-                        <Step title="Ask Questions" description="Type your environmental questions in the chatbot" />
-                        <Step title="Get Predictions" description="View forecasted trends for temperature, humidity, and other sensor measurements" />
-                        <Step title="Recieve Recommendations" description="Get personalised suggestions for reducing you carbon footprint" />
-                        <Step title="Detect Anomalies" description="The AI will identify unusual patterns in your environmental data and history" />
+                        <Steps.Step title="Ask Questions" description="Type your environmental questions in the chatbot" />
+                        <Steps.Step title="Get Predictions" description="View forecasted trends for temperature, humidity, and other sensor measurements" />
+                        <Steps.Step title="Recieve Recommendations" description="Get personalised suggestions for reducing you carbon footprint" />
+                        <Steps.Step title="Detect Anomalies" description="The AI will identify unusual patterns in your environmental data and history" />
                     </Steps>
                     <Paragraph style={{ marginTop: '16px'}}>
                         <Text strong>Example questions you can ask:</Text>
@@ -168,8 +165,8 @@ const UserGuide = () => {
                         <li>"Suggest ways to optimise water usage"</li>
                         <li>"Explain the recent humidity variations"</li>
                     </ul>
-                </Panel>
-                <Panel
+                </Collapse.Panel>
+                <Collapse.Panel
                     header={<Title level={5} style={{ margin: 0}}><LineChartOutlined />Reports</Title>}
                     key="5"
                     style={{
@@ -191,9 +188,9 @@ const UserGuide = () => {
                     <Paragraph style={{ marginTop: '16px'}}>
                         Reports can be exported as PDF documents that you can send to your email for accurate record keeping.
                     </Paragraph>
-                </Panel>
+                </Collapse.Panel>
 
-                <Panel 
+                <Collapse.Panel 
                     header={<Title level={5} style={{ margin: 0}}><HomeOutlined />Room Monitoring</Title>}
                     key="6"
                     style={{
@@ -215,8 +212,8 @@ const UserGuide = () => {
                     <Paragraph style={{ marginTop: '16px'}}>
                         Use the tab interface to switch between different rooms and can view their specific environmental conditions.
                     </Paragraph>
-                </Panel>
-                <Panel
+                </Collapse.Panel>
+                <Collapse.Panel
                     header={<Title level={5} style={{margin:0}}><CarOutlined /> Vehicle Monitoring</Title>}
                     key="7"
                     style={{
@@ -239,7 +236,7 @@ const UserGuide = () => {
                     <Paragraph style={{ marginTop: '16px'}}>
                         Use this data to identify oppourtunities for more efficient driving practices and reduce your vehicle's environental imapact.
                     </Paragraph>
-                </Panel>
+                </Collapse.Panel>
             </Collapse>
 
             <Divider style={{ borderColor: '#AED581'}} />

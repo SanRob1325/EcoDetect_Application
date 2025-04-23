@@ -3,7 +3,10 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import Dashboard from '../Dashboard';
 import apiService from '../apiService';
-import { getAllHeadings } from '../setupTests';
+
+const getAllHeadings = () => {
+  return document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+}
 
 // Mock the apiService
 jest.mock('../apiService');
@@ -91,15 +94,24 @@ describe('Dashboard Component', () => {
 
   test('renders dashboard components', async () => {
     render(<Dashboard />);
-    
-    // Initial loading state - use more specific selectors to avoid ambiguity
-    const headings = getAllHeadings();
-    const headingTexts = Array.from(headings).map(h => h.textContent);
-    
-    // Check for key component headings
-    expect(headingTexts.some(text => text.includes('Temperature'))).toBe(true);
-    expect(headingTexts.some(text => text.includes('Humidity'))).toBe(true);
-    
+
+    await waitFor(() => {
+      try {
+
+        const temperatureHeading = screen.getByText('Temperature')
+        const humidityHeading = screen.getByText('Humidity')
+        const pressureHeading = screen.getByText('Barometric Pressure');
+
+        expect(temperatureHeading).toBeInTheDocument();
+        expect(humidityHeading).toBeInTheDocument();
+        expect(pressureHeading).toBeInTheDocument();
+      } catch (error){
+        console.error('Heading detection error:', error);
+
+        throw error
+      }
+    })
+        
     // Wait for data to load
     await waitFor(() => {
       expect(apiService.getSensorData).toHaveBeenCalled();

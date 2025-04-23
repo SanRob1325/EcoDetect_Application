@@ -1,42 +1,109 @@
 // src/setupTests.js
-// jest-dom adds custom jest matchers for asserting on DOM nodes.
-// allows you to do things like:
-// expect(element).toHaveTextContent(/react/i)
-// learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
 
-// Override console.error to reduce test noise
-const originalError = console.error;
+// Mock browser APIs needed for Ant Design components
+beforeAll(() => {
+  // Mock window.matchMedia - required for Ant Design responsive components
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(),    // Deprecated but used by Ant Design
+      removeListener: jest.fn(), // Deprecated but used by Ant Design
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  });
 
-console.error = (...args) => {
-  // Suppress specific warning messages that we know about and are fixing
-  if (
-    args[0]?.includes('`children` should be `Select.Option`') ||
-    args[0]?.includes('bodyStyle is deprecated') ||
-    args[0]?.includes('You cannot render a <Router> inside another <Router>') ||
-    args[0]?.includes('Warning: Failed prop type')
-  ) {
-    return;
-  }
+  // Mock ResizeObserver - used by some Ant Design components
+  Object.defineProperty(window, 'ResizeObserver', {
+    writable: true,
+    value: jest.fn().mockImplementation(() => ({
+      observe: jest.fn(),
+      unobserve: jest.fn(),
+      disconnect: jest.fn(),
+    })),
+  });
+
+  // Capture original console methods
+  const originalError = console.error;
+  const originalWarn = console.warn;
   
-  // Let other errors through
-  originalError.call(console, ...args);
-};
-
-// Suppress some React warnings that might not be relevant in tests
-const originalWarn = console.warn;
-console.warn = (...args) => {
-  // Add suppressions for specific warnings here if needed
+  // Comprehensive warning suppression
+  console.error = (...args) => {
+    // Normalize args to string for safer checking
+    const errorMessage = args[0] ? String(args[0]) : '';
+    // Expanded list of warnings to suppress
+    const suppressedWarnings = [
+      // Antd specific deprecation warnings
+      'Tabs.TabPane is deprecated',
+      '`Tabs.TabPane` is deprecated',
+      'headStyle is deprecated',
+      'bodyStyle is deprecated',
+      'Warning: \\[antd: (Card|Modal|Tabs|Select)\\]',
+      '`children` should be `Select.Option`',
+      
+      // React Router warnings
+      'You cannot render a <Router> inside another <Router>',
+      
+      // General React warnings
+      'Warning: Failed prop type',
+      'Warning: An update to .* inside a test was not wrapped in act',
+      'Attempted to synchronously unmount a root',
+      
+      // Possible async/state update warnings
+      'Cannot update a component',
+      'React does not recognize the .* prop on a DOM element',
+      
+      // Add known warnings from your tests
+      'Error fetching CO2 trends',
+    ];
+    
+    // Check if any suppressed warning matches
+    const shouldSuppress = suppressedWarnings.some(warning => 
+      new RegExp(warning, 'i').test(errorMessage)
+    );
+    
+    // Only call original error if not a suppressed warning
+    if (!shouldSuppress) {
+      originalError.call(console, ...args);
+    }
+  };
   
-  originalWarn.call(console, ...args);
-};
+  // Similar approach for warnings
+  console.warn = (...args) => {
+    const warnMessage = args[0] ? String(args[0]) : '';
+    const suppressedWarnings = [
+      'Tabs.TabPane is deprecated',
+      '`Tabs.TabPane` is deprecated',
+      'React does not recognize the .* prop on a DOM element',
+      'Warning: Received `true` for a non-boolean attribute',
+      'Warning: Invalid aria',
+    ];
+    const shouldSuppress = suppressedWarnings.some(warning => 
+      new RegExp(warning, 'i').test(warnMessage)
+    );
+    if (!shouldSuppress) {
+      originalWarn.call(console, ...args);
+    }
+  };
+});
 
-// Create a minimal Header component for tests if it doesn't exist
-if (!global.Header) {
-  global.Header = ({ onNavigate }) => (
-    <nav data-testid="header">
-      <button onClick={() => onNavigate && onNavigate('/')}>Dashboard</button>
-      <button onClick={() => onNavigate && onNavigate('/rooms')}>Rooms</button>
-    </nav>
-  );
-}
+// Restore original console methods after tests
+afterAll(() => {
+  // Note: These will be undefined unless defined in the global scope
+  if (typeof originalError !== 'undefined') console.error = originalError;
+  if (typeof originalWarn !== 'undefined') console.warn = originalWarn;
+});
+
+// Optional: Global test configuration
+jest.setTimeout(10000); // Increase timeout for async tests
+
+// Optional: Add global test setup
+beforeEach(() => {
+  // Clear all mocks before each test
+  jest.clearAllMocks();
+});

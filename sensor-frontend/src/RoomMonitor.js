@@ -4,7 +4,6 @@ import { HomeOutlined, EnvironmentOutlined, ClockCircleOutlined, DropboxOutlined
 import GaugeChart from 'react-gauge-chart';
 import apiService from './apiService';
 
-const { TabPane } = Tabs;
 const { Text, Title } = Typography;
 const { Option } = Select;
 
@@ -312,7 +311,7 @@ const RoomMonitor = () => {
                     tabBarGutter={8}
                 >
                     {rooms.map(room => (
-                        <TabPane
+                        <Tabs.TabPane
                             tab={
                                 <div>
                                     <EnvironmentOutlined style={{ marginRight: '4px' }} />
@@ -620,7 +619,7 @@ const RoomMonitor = () => {
                                     )}
                                 </div>
                             )}
-                        </TabPane>
+                        </Tabs.TabPane>
                     ))}
                 </Tabs>
             </Card>
