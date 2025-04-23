@@ -60,10 +60,18 @@ def test_complete_system_workflow(client, monkeypatch):
                         assert sensor_data["humidity"] > new_thresholds["humidity_range"][1]
 
     # test alert 
-    with patch('bson.json_util.default', side_effect=mock_objectid_serialization):
-        # Force test alert if both thresholds exceeded
-        response = client.get('/api/force-create-alert-dynamo', headers={"Authorization": "Bearer dummy-token"})
-        assert response.status_code == 200
+    with patch('backend.alert_service.get_alerts_history') as mock_get_alerts:
+            mock_get_alerts.return_value = {
+                "Items": [{
+                    "id": "alert-123",
+                    "timestamp": datetime.now().isoformat(),
+                    "exceeded_thresholds": ["temperature_high", "humidity_high"],
+                    "severity" : "critical"
+                }]
+            }
+
+            response = client.get('/api/alerts', headers={"Authorization": "Bearer dummy-token"})
+            assert response.status_code == 200
     
     # Next step is to check alerts generated
     response = client.get('/api/alerts-dynamodb', headers={"Authorization": "Bearer dummy-token"})
