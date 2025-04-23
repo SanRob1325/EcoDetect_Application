@@ -26,7 +26,6 @@ def mock_objectid_serialization(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 """Entire workflow test"""
-@patch('backend.boto3.resource')
 def test_complete_system_workflow(client, monkeypatch):
     """Test a complete workflow through the system"""
     # Mock authentication
