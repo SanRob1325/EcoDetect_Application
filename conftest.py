@@ -2,12 +2,19 @@ import sys
 from unittest.mock import MagicMock
 import pytest
 import os
-from backend import app as flask_app
+from backend import app 
 
 @pytest.fixture
 def client():
-    with flask_app.test_client() as client:
+    app.config['TESTING'] = True
+    with app.test_client() as client:
         yield client
+
+@pytest.fixture(autouse=True)
+def mock_boto_clients(monkeypatch):
+    dummy_client = MagicMock()
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: dummy_client)
+    return dummy_client
 
 @pytest.fixture(autouse=True)
 def mock_env(monkeypatch):

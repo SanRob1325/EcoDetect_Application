@@ -78,8 +78,11 @@ def test_check_thresholds_within_range():
     assert exceeded == []
 
 @patch.dict(os.environ, {
+    "AWS_ACCESS_KEY_ID": "dummy",
+    "AWS_SECRET_ACCESS_KEY": "dummy",
     "SES_EMAIL_SENDER": "test@example.com",
-    "SES_EMAIL_RECIPIENT": "to@example.com"
+    "SES_EMAIL_RECIPIENT": "to@example.com",
+    "SNS_TOPIC_ARN": "dumm-arn"
 })
 # Mocking AWS SES and SNS for alert sending
 def test_send_alert_email():
