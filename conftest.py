@@ -1,5 +1,13 @@
 import sys
 from unittest.mock import MagicMock
+
+# Mocking Sensehats since its using mock sensor data
+#  Pi is not being run
+mock_sensehat_class = MagicMock()
+mock_sensehat_instance = MagicMock()
+mock_sensehat_class.return_value = mock_sensehat_instance
+sys.modules['sense_hat'] = MagicMock(SenseHat=mock_sensehat_class)
+
 import pytest
 import os
 from backend import app 
@@ -29,9 +37,3 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("ROOT_CA_PATH2", "/tmp/dummy-ca.pem")
     monkeypatch.setenv("CI", "true")
 
-# Mocking Sensehats sinc
-#  Pi is not being run
-mock_sensehat_class = MagicMock()
-mock_sensehat_instance = MagicMock()
-mock_sensehat_class.return_value = mock_sensehat_instance
-sys.modules['sense_hat'] = MagicMock(SenseHat=mock_sensehat_class)
