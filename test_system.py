@@ -46,10 +46,10 @@ def test_complete_system_workflow(client, monkeypatch):
     assert response.status_code == 200
 
     # Get sensor data as the next step
-    with patch('backend.sensor.get_temperature', return_value=27.0, autospec=True):
-        with patch('backend.sensor.get_humidity', return_value=70.0, autospec=True):
-            with patch('backend.sensor.get_pressure', return_value=1010.0, autospec=True):
-                with patch('backend.get_cpu_temperature', return_value=30.0, autospec=True):
+    with patch('backend.sensor.get_temperature', return_value=27.0):
+        with patch('backend.sensor.get_humidity', return_value=70.0):
+            with patch('backend.sensor.get_pressure', return_value=1010.0):
+                with patch('backend.get_cpu_temperature', return_value=30.0):
                     with patch('bson.json_util.default', side_effect=mock_objectid_serialization):
                         response = client.get('/api/sensor-data', headers={"Authorization": "Bearer dummy-token"})
                         assert response.status_code == 200
