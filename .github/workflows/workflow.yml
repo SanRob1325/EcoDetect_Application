@@ -59,7 +59,7 @@ jobs:
         npm install
     - name: Run Frontend Tests
       run: |
-        cd EcoDetect_Application/sensor-frontend
+        cd ./sensor-frontend
         npm test -- --coverage
 
     # Upload coverage
@@ -180,7 +180,7 @@ jobs:
           fi
 
           if [ -d ~/sensor-frontend-build ]; then
-            cp -r ~/sensor-frontend-build ~/backups/$timestamps/
+            cp -r ~/sensor-frontend-build ~/backups/$timestamp/
           fi
 
           # Deploy backend
