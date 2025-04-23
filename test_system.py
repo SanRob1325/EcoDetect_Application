@@ -61,18 +61,27 @@ def test_complete_system_workflow(client, monkeypatch):
                         assert sensor_data["humidity"] > new_thresholds["humidity_range"][1]
 
     # test alert 
-    with patch('backend.alert_table.scan') as mock_get_alerts:
-            mock_get_alerts.return_value = {
-                "Items": [{
-                    "id": "alert-123",
-                    "timestamp": datetime.now().isoformat(),
-                    "exceeded_thresholds": ["temperature_high", "humidity_high"],
-                    "severity" : "critical"
-                }]
-            }
+    with patch('backend.alert_table.scan') as mock_scan:
+            with patch('backend.dynamodb.Table') as mock_table:
+                with patch('boto3.resource') as mock_boto_resource:
 
-            response = client.get('/api/alerts', headers={"Authorization": "Bearer dummy-token"})
-            assert response.status_code == 200
+                    mock_scan.return_value = {
+
+                        "Items": [{
+                            "id": "alert-123",
+                            "timestamp": datetime.now().isoformat(),
+                            "exceeded_thresholds": ["temperature_high", "humidity_high"],
+                            "severity" : "critical"
+                        }]
+                    }
+
+                    mock_table_instance = MagicMock()
+                    mock_table_instance.scan.return_value = mock_scan.return_value
+                    mock_table.return_value = mock_table_instance
+                    mock_boto_resource.return_value = MagicMock()
+                    
+                    response = client.get('/api/alerts', headers={"Authorization": "Bearer dummy-token"})
+                    assert response.status_code == 200
     
     # Next step is to check alerts generated
     response = client.get('/api/alerts-dynamodb', headers={"Authorization": "Bearer dummy-token"})
