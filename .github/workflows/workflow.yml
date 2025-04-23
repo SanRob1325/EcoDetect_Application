@@ -11,6 +11,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      ROOT_CA_PATH2: /tmp/dummy-ca.pem
+      PRIVATE_KEY_PATH2: /tmp/dummy-key.pem
+      CERTIFICATE_PATH3: /tmp/dummy-cert.pem
     services:
       mongodb:
         image: mongo:4.4
@@ -28,6 +32,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-cov
+    - name: Create dummy cert files for MQTT
+      run: |
+        echo "dummy" > $ROOT_CA_PATH2
+        echo "dummy" > $PRIVATE_KEY_PATH2
+        echo "dummy" > $CERTIFICATE_PATH2
     
     - name: Run Backend Tests
       run: python -m pytest --cov=. --cov-report=xml
