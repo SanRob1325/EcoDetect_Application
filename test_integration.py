@@ -20,7 +20,7 @@ def client(app):
 
 class TestSystemIntegration:
     """Testing system flow and integrations with different fuctionality"""
-
+    @patch('backend.boto3.resource')
     def test_complete_monitoring_flow(self, client, monkeypatch):
         """Test complete flow from sensor data -> threshold check -> alert -> report"""
 

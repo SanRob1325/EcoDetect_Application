@@ -46,5 +46,13 @@ def mock_env(monkeypatch):
 def mock_boto_clients(monkeypatch):
     dummy_client = MagicMock()
     monkeypatch.setattr("boto3.client", lambda *args, **kwargs: dummy_client)
-    monkeypatch.setattr("boto3.resource", lambda *args, **kwargs: MagicMock())
+
+    # Mock for dynamodb
+    mock_table = MagicMock()
+    mock_table.query.return_value = {
+        "Items": [{"timestamp": "2025-04-23T01:00:00", "value": 123}]
+    }
+    mock_dynamodb = MagicMock()
+    mock_dynamodb.Table.return_value = mock_table
+    monkeypatch.setattr("boto3.resource", lambda *args, **kwargs: mock_dynamodb)
     return dummy_client

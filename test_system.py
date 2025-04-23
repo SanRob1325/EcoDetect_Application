@@ -26,6 +26,7 @@ def mock_objectid_serialization(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 """Entire workflow test"""
+@patch('backend.boto3.resource')
 def test_complete_system_workflow(client, monkeypatch):
     """Test a complete workflow through the system"""
     # Mock authentication
@@ -184,6 +185,7 @@ def test_api_performance(client, monkeypatch):
                                     for endpoint, stats in results.items():
                                         print(f"{endpoint}: Average: {stats['avg']:.2f}ms, P95: {stats['p95']:.2f}ms")
 
+@patch('backend.get_water_usage', return_value={"usage_liters": 10})
 def test_high_load_performance(client, monkeypatch):
     """Test system performance under high load with concurrent api requests"""
     
