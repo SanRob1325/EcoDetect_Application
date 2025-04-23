@@ -16,6 +16,12 @@ jobs:
       ROOT_CA_PATH2: /tmp/dummy-ca.pem
       PRIVATE_KEY_PATH2: /tmp/dummy-key.pem
       CERTIFICATE_PATH2: /tmp/dummy-cert.pem
+      AWS_REGION: eu-west-1
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      SES_EMAIL_SENDER: dummy@example.com
+      SES_EMAIL_RECIPIENT: recipient@example.com
+      SNS_TOPIC_ARN: dummy-arn
     services:
       mongodb:
         image: mongo:4.4
@@ -75,7 +81,7 @@ jobs:
     - name: Set Up Node.js
       uses: actions/setup-node@v2
       with:
-        python-version: '16'
+        node-version: '16'
 
     - name: Install Frontend Dependencies
       run: |
@@ -90,7 +96,7 @@ jobs:
         "name": "EcoDetect Environmental Monitoring",
         "icons": [
           {
-            "src": "favicon.ico"
+            "src": "favicon.ico",
             "sizes": "64x64",
             "type": "image/x-icon"
           },
@@ -161,7 +167,7 @@ jobs:
         scp sensor-frontend.zip ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST}}:~/
 
         # Deploy commands
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2__HOST }} << 'EOL'
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOL'
           # stop services
           sudo systemctl stop ecodetect-backend || true
           

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import importlib
 import pandas as pd
 from io import StringIO
+import os
 from reports import generate_report_data, find_anomalies, calculate_statistics,generate_pdf_report,generate_csv_report
 @pytest.fixture
 def app():
@@ -76,6 +77,10 @@ def test_check_thresholds_within_range():
     exceeded = check_thresholds(data, thresholds)
     assert exceeded == []
 
+@patch.dict(os.environ, {
+    "SES_EMAIL_SENDER": "test@example.com",
+    "SES_EMAIL_RECIPIENT": "to@example.com"
+})
 # Mocking AWS SES and SNS for alert sending
 def test_send_alert_email():
     with patch('alert_service.boto3.client') as mock_boto:

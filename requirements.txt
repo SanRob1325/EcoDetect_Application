@@ -25,6 +25,7 @@ statsmodels
 
 # PDF and Reports
 matplotlib
+reportlab
 
 # Testing
 pytest
