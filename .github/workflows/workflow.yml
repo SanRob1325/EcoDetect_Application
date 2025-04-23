@@ -14,7 +14,7 @@ jobs:
     env:
       ROOT_CA_PATH2: /tmp/dummy-ca.pem
       PRIVATE_KEY_PATH2: /tmp/dummy-key.pem
-      CERTIFICATE_PATH3: /tmp/dummy-cert.pem
+      CERTIFICATE_PATH2: /tmp/dummy-cert.pem
     services:
       mongodb:
         image: mongo:4.4
