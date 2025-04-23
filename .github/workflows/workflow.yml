@@ -55,7 +55,7 @@ jobs:
         node-version: '16'  
     - name: Install dependencies
       run: | 
-        cd EcoDetect_Application/sensor-frontend
+        cd ./sensor-frontend
         npm install
     - name: Run Frontend Tests
       run: |
