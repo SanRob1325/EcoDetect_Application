@@ -28,7 +28,7 @@ jobs:
         ports:
           - 27017:27017
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       # Backend Tests
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -50,7 +50,7 @@ jobs:
     
     # Frontend Tests
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '16'  
     - name: Install dependencies
@@ -64,7 +64,7 @@ jobs:
 
     # Upload coverage
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v4
       with:
         directory: ./
         fail_ci_if_error: false
@@ -75,11 +75,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     # Build frontend
     - name: Set Up Node.js
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v4
       with:
         node-version: '16'
 
@@ -127,13 +127,13 @@ jobs:
           zip -r ../sensor-frontend.zip build/*
     
     - name: Upload backend artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: backend
         path: backend.zip
 
     - name: Upload frontend artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sensor-frontend
         path: sensor-frontend.zip
@@ -145,17 +145,17 @@ jobs:
     if: github.ref == 'refs/heads/main'  && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') 
     steps:
     - name: Download backend artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with: 
         name: backend
 
     - name: Download frontend artifact
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: sensor-frontend
         
     - name: Install SSH key
-      uses: shimataro/ssh-key-action@v2
+      uses: shimataro/ssh-key-action@v4
       with:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         known_hosts: ${{ secrets.KNOWN_HOSTS }}
