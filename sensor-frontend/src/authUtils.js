@@ -1,9 +1,7 @@
 import { Amplify } from 'aws-amplify';
 import {
     getCurrentUser,
-    signIn as amplifySignIn,
     signOut as amplifySignOut,
-    confirmSignUp as amplifyConfirmSignUp,
     resetPassword,
     confirmResetPassword,
     fetchUserAttributes
