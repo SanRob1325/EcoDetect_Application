@@ -127,13 +127,13 @@ jobs:
           zip -r ../sensor-frontend.zip build/*
     
     - name: Upload backend artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: backend
         path: backend.zip
 
     - name: Upload frontend artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: sensor-frontend
         path: sensor-frontend.zip
