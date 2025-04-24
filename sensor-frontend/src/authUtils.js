@@ -3,7 +3,7 @@ import {
     getCurrentUser,
     signIn,
     signOut as amplifySignOut,
-    confirmSignUp,
+    confirmSignUp as amplifyConfirmSignUp,
     resetPassword,
     confirmResetPassword,
     fetchUserAttributes
