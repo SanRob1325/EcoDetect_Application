@@ -129,7 +129,7 @@ jobs:
     - name: Package frontend
       run: |
           cd sensor-frontend
-          zip -r ./sensor-frontend.zip build/*
+          zip -r ../sensor-frontend.zip build/*
     
     - name: Upload backend artifact
       uses: actions/upload-artifact@v4
