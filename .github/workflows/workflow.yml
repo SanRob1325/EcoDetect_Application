@@ -106,25 +106,25 @@ jobs:
             "type": "image/x-icon"
           },
           {
-            "src": "logo192.png"
+            "src": "logo192.png",
             "type": "image/png",
             "sizes": "192x192"
           },
           {
-            "src": "logo512.png"
+            "src": "logo512.png",
             "type": "image/png",
-            "type": "512x512"
+            "sizes": "512x512"
           }  
         ],
         "start_url": ".",
         "display": "standalone",
         "theme_color": "#388E3C",
         "background_color": "#F1F8E9"
-        }' > ./sensor-frontend/public/manifest.json  
+        }' > ./public/manifest.json  
 
     - name: Package backend
       run: |
-          zip -r ..backend.zip ./*
+          zip -r ../backend.zip ./*
     
     - name: Package frontend
       run: |
@@ -202,15 +202,15 @@ jobs:
 
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with: 
-        name: backend-code
+        name: backend
         path: ./backend
 
     - name: Download frontend build
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
-        name: frontend-build
+        name: sensor-frontend
         path: ./
   
     - name: Configure AWS credentials
