@@ -124,7 +124,7 @@ jobs:
 
     - name: Package backend
       run: |
-          zip -r ../backend.zip ./*
+          zip -r backend.zip ./* --exclude="sensor-frontend/*" --exclude=".github/*" 
     
     - name: Package frontend
       run: |
