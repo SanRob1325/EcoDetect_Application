@@ -82,14 +82,19 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '16'
-
+    
     - name: Install Frontend Dependencies
+      run: |
+        cd ./sensor-frontend
+        npm install
+
+    - name: Install Frontend Build
       run: |
         cd ./sensor-frontend
         npm run build
     - name: Create PWA manifest and service worker
       run: |
-        cd EcoDetect_Application/sensor-frontend
+        cd ./sensor-frontend
         # Create manifest.json for PWA
         echo '{
         "short_name": "EcoDetect",
@@ -115,7 +120,7 @@ jobs:
         "display": "standalone",
         "theme_color": "#388E3C",
         "background_color": "#F1F8E9"
-        }' > manifest.json  
+        }' > ./sensor-frontend/public/manifest.json  
 
     - name: Package backend
       run: |
@@ -124,7 +129,7 @@ jobs:
     - name: Package frontend
       run: |
           cd sensor-frontend
-          zip -r ../sensor-frontend.zip build/*
+          zip -r ./sensor-frontend.zip build/*
     
     - name: Upload backend artifact
       uses: actions/upload-artifact@v4
