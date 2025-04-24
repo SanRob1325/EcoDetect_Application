@@ -65,6 +65,7 @@ export const AuthProvider = ({ children }) => {
         } : {})
       });
       
+      console.log('Sign in result:', result)
       // Get user data after successful sign in
       const userData = await currentAuthenticatedUser();
       

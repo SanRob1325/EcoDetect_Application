@@ -3,7 +3,7 @@ import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://ant
 import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar, Checkbox } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
 import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
 import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
-import { notification, Typography } from 'antd';
+import { notification} from 'antd';
 import Alerts from './Alerts';
 import CarbonFootprintCard from './CarbonFootprint';
 import ReportCard from './ReportCard';
@@ -130,7 +130,7 @@ const Dashboard = () => {
         const interval = setInterval(fetchAlerts, 30000); // every 30 seconds
         return () => clearInterval(interval)
 
-    }, [])
+    }, [alerts.length])
 
     useEffect(() => {
         const fetchNotificationPrefs = async () => {

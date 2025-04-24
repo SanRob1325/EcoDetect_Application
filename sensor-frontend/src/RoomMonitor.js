@@ -80,7 +80,7 @@ const RoomMonitor = () => {
         // Set up polling
         const interval = setInterval(fetchAllRoomData, 10000);
         return () => clearInterval(interval);
-    }, [rooms, enabledRooms]);
+    }, [rooms, enabledRooms, roomData]);
 
     const handleTabChange = (activeKey) => {
         setActiveRoom(activeKey);

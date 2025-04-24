@@ -4,7 +4,7 @@ import {Card, Form, Input, Button, Alert, Steps, Typography} from 'antd';
 import { MailOutlined, LockOutlined} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
-const {Title, Text} = Typography;
+const {Title} = Typography;
 
 const ForgotPassword = () => {
     const [loading, setLoading] = useState(false);

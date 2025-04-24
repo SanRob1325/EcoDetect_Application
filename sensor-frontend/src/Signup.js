@@ -11,7 +11,7 @@ const Signup = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [confirmStep, setConfirmStep] = useState(false);
-    const [_, setEmail] = useState('');
+    const [, setEmail] = useState('');
     const [username, setUsername] = useState('')
     const navigate = useNavigate(); 
 

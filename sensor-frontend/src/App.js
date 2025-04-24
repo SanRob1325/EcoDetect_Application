@@ -32,6 +32,19 @@ const AppContent = () => {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [lastActivity, setLastActivity] = useState(Date.now());
 
+  const handleLogout = React.useCallback(async (isAutoLogout = false) => {
+    try {
+      await signOut();
+      logout()
+
+      if (isAutoLogout) {
+        message.info('You have been logged out because of inactivity, please login again')
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  }, [logout]);
+  
   useEffect(() => {
     if (!loading) {
       setIsLoading(false);
@@ -73,20 +86,7 @@ const AppContent = () => {
       });
       clearInterval(inactivityInterval);
     };
-  }, [isAuthenticated, lastActivity]);
-
-  const handleLogout = async (isAutoLogout = false) => {
-    try {
-      await signOut();
-      logout()
-
-      if (isAutoLogout) {
-        message.info('You have been logged out because of inactivity, please login again')
-      }
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
+  }, [isAuthenticated, lastActivity, handleLogout]);
 
 
   const navigationMenu = (

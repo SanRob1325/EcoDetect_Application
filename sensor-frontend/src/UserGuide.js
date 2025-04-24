@@ -1,6 +1,6 @@
 import React from 'react'
 import { Card, Collapse, Typography, Divider, Steps, Button} from 'antd';
-import { QuestionCircleOutlined, SettingOutlined, BellOutlined, RobotOutlined, LineChartOutlined,CarOutlined, FileTextOutlined, DashboardOutlined, HomeOutlined} from '@ant-design/icons';
+import { QuestionCircleOutlined, SettingOutlined, BellOutlined, RobotOutlined, LineChartOutlined,CarOutlined, DashboardOutlined, HomeOutlined} from '@ant-design/icons';
 
 const { Title, Paragraph, Text } = Typography;
 const UserGuide = () => {

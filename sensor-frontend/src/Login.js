@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Input, Button, Alert, Typography, Spin } from 'antd';
+import { Card, Form, Input, Button, Alert, Typography} from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import ecoBackground from './Ecofriendly_background.jpg'
 import logoImg from './Icon-Only-Color.png';
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const Login = () => {
     const [loading, setLoading] = useState(false);
