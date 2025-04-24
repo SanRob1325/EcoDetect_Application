@@ -5,7 +5,6 @@ import { MailOutlined, LockOutlined} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const {Title, Text} = Typography;
-const { Step } = Steps;
 
 const ForgotPassword = () => {
     const [loading, setLoading] = useState(false);
@@ -54,8 +53,8 @@ const ForgotPassword = () => {
             <Card style={{ width: 400}}>
                 <Title level={2} style={{textAlign: 'center'}}> Reset Password</Title>
                 <Steps current={currentStep} style={{marginBottom: 24}}>
-                    <Step title="Request" description="Get code" />
-                    <Step title="Reset" description="New password"/>
+                    <Steps.Step title="Request" description="Get code" />
+                    <Steps.Step title="Reset" description="New password"/>
                 </Steps>
 
                 {error && <Alert message={error} type="error" style={{ marginBottom: 16}} />}
