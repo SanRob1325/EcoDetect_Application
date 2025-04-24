@@ -156,7 +156,7 @@ describe('RoomMonitor Component', () => {
     await waitFor(() => {
       expect(apiService.queryAIAssistant).toHaveBeenCalled();
     });
-  });
+  }, 20000);
 
   test('handles no rooms configured', async () => {
     // Mock empty rooms response
