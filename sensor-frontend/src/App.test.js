@@ -2,6 +2,9 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
+// Import App after mocking
+import App from './App';
+
 // Mock dependencies 
 jest.mock('antd', () => ({
   Dropdown: ({ children, overlay }) => <div data-testid="mock-dropdown">{children}{overlay}</div>,
@@ -109,9 +112,6 @@ jest.mock('./AuthContext', () => ({
     logout: jest.fn()
   })
 }));
-
-// Import App after mocking
-import App from './App';
 
 describe('App Component', () => {
   // Reset mocks before each test

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, act } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Spin, Empty, Badge, Typography, Switch, Select, Button, message, Modal, Avatar, Input } from 'antd';
 import { HomeOutlined, EnvironmentOutlined, ClockCircleOutlined, DropboxOutlined, PoweroffOutlined, RobotOutlined, QuestionCircleOutlined, SendOutlined } from '@ant-design/icons'
 import GaugeChart from 'react-gauge-chart';

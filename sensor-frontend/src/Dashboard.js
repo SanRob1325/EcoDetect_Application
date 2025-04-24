@@ -3,12 +3,11 @@ import GaugeChart from 'react-gauge-chart'; // Gauge chart component https://ant
 import { Card, Slider, Button, Select, Spin, Progress, Modal, Input, Avatar, Checkbox } from 'antd'; // Ant Design Components Reference: https://ant.design/components/overview
 import { RobotOutlined, SendOutlined } from '@ant-design/icons' // Avatar Icon for chatbot window:https://www.v0.app/icon/ant-design/robot-outlined 
 import chatbotIcon from './Icon-Only-Color.png' // leaf icon for AI chatbot Icon
-import { notification, Badge, List, Typography } from 'antd';
+import { notification, Typography } from 'antd';
 import Alerts from './Alerts';
 import CarbonFootprintCard from './CarbonFootprint';
 import ReportCard from './ReportCard';
 import apiService from './apiService';
-const { Text } = Typography
 
 const { Option } = Select;
 //Stores sensor data such as temperature,humidity,water usage and CO2 leves

@@ -23,7 +23,7 @@ import ForgotPassword from './ForgotPassword';
 import ProtectedRoute from './ProtectedRoute';
 import { signOut } from './authUtils';
 import { AuthProvider, useAuth } from './AuthContext';
-const { Header, Content, Sider } = Layout;
+const { Header, Content} = Layout;
 
 const { Title } = Typography;
 
