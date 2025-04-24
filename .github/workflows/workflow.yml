@@ -159,7 +159,7 @@ jobs:
         zip -r ../android-app.zip android/app/build/outputs/apk/release/*
     
     - name: Upload APK artifact
-      uses: actions/upload-artifact@4
+      uses: actions/upload-artifact@v4
       with:
         name: android-app
         path: android-app.zip
