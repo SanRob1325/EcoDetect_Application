@@ -73,7 +73,6 @@ jobs:
     name: Build
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
     - uses: actions/checkout@v4
 
@@ -125,7 +124,6 @@ jobs:
     - name: Package backend
       run: |
           zip -r backend.zip ./* --exclude="sensor-frontend/*" --exclude=".github/*" 
-    
     - name: Package frontend
       run: |
           cd sensor-frontend
@@ -161,7 +159,7 @@ jobs:
         zip -r ../android-app.zip android/app/build/outputs/apk/release/*
     
     - name: Upload APK artifact
-      uses: actions/upload-artifact@4
+      uses: actions/upload-artifact@2
       with:
         name: android-app
         path: android-app.zip
