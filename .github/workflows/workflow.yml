@@ -85,7 +85,7 @@ jobs:
 
     - name: Install Frontend Dependencies
       run: |
-        cd EcoDetect_Application/sensor-frontend
+        cd ./sensor-frontend
         npm run build
     - name: Create PWA manifest and service worker
       run: |
