@@ -142,6 +142,29 @@ jobs:
       with:
         name: sensor-frontend
         path: sensor-frontend.zip
+    
+    - name: Install React Native dependencies
+      run: |
+        cd sensor-frontend
+        npm install -g react-native-cli
+        npm install
+    
+    - name: Build React Native for Android
+      run: |
+        cd sensor-frontend/android
+        ./gradlew assembleRelease
+    
+    - name: Package APK (Android)
+      run: |
+        cd sensor-frontend
+        # Zip the APK
+        zip -r ../android-app.zip android/app/build/outputs/apk/release/*
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@4
+      with:
+        name: android-app
+        path: android-app.zip
   
   deploy-dev:
     name: Deploy to EC2
@@ -192,6 +215,28 @@ jobs:
           rm -rf ~/backend
           mkdir -p ~/backend
           unzip -o ~/backend.zip -d ~/backend
+          # Install dependencies
+          cd ~/backend
+          pip3 install -r requirements.txt
+
+          # Deploy frontend
+          rm -rf ~/sensor-frontend-build
+          mkdir -p ~/sensor-frontend-build
+          unzip -o ~/sensor-frontend.zip -d ~/sensor-frontend-build
+
+          # Restart services
+          sudo systemctl restart nginx
+          sudo systemctl start ecodetect-backend
+          sudo systemctl enable ecodetect-backend
+
+          # Cleanup
+          rm ~/backend.zip
+          rm ~/sensor-frontend.zip
+
+          # Purging old backups
+          cd ~/backups
+          ls -t | tail -n +6 | xargs rm -rf
+        EOL
     
     
   deploy-prod:
@@ -211,7 +256,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: sensor-frontend
-        path: ./
+        path: ./sensor-frontend
   
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
