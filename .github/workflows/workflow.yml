@@ -89,10 +89,6 @@ jobs:
           cd deploy 
           zip -r ../backend_deployment.zip .
 
-    - name: Create service file 
-      run: |
-        cat > ecodetect-backend.service << 'EOF'
-
     - name: Deploy to EC2
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -110,6 +106,22 @@ jobs:
 
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST '
+
+          # Clear package cache to free up space
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+
+          # Cleans up old Python cache files
+          find ~/ -name "__pycache__" -type d -exec rm -rf {} \; 2>/dev/null || true
+          find ~/ -name "*.pyc" -delete 2>/dev/null || true
+
+          # Clean old backups if any directory exists
+          if [ -d ~/ecodetect_backups ]; then
+            rm -rf ~/ecodetect_backups/*
+          fi
+          
+          # Show available disk 
+          df -h
           # Installing required packages
           sudo apt-get update
           sudo apt-get install -y unzip python3-venv
