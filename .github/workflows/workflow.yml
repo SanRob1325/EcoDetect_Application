@@ -150,7 +150,7 @@ jobs:
         sleep 30
 
         # Performs health check 
-        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.EC2_HOST }}/api/health)
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://127.0.0.1:5000/api/health --connect-timeout 10)
 
         if [ $RESPONSE -eq 200 ]; then
           echo "Deployment successful, health check passed."
