@@ -39,7 +39,8 @@ jobs:
         python -m pip install --upgrade pip
         sudo apt-get update
         sudo apt-get install -y python3-dev libatlas-base-dev
-        pip install RTIMULib
+        #pip install RTIMULib --no-cache-dir -v #skipped for now
+
         pip install -r requirements.txt
         pip install pytest pytest-cov
     - name: Create dummy cert files for MQTT
