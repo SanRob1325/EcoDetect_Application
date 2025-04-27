@@ -101,13 +101,13 @@ jobs:
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        # Copy deploymentt package 
+        # Copy deployment package 
         scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
 
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'DEPLOY_SCRIPT'
 
-          # Installing rquired packages
+          # Installing required packages
           sudo apt-get update
           sudo apt-get install -y unzip python3-venv
 
@@ -134,18 +134,33 @@ jobs:
           pip install --upgrade pip
           pip install -r ~/ecodetect/requirements.txt
 
-          if [ ! -f /etc/systemd/system/ecodetect-backend.service]; then
-            echo "Creating systemd serivce file"
-            sudo tee /etc/systemd/system/ecodetect-backend.service > /dev/null << 'SERVICE'
+          if [ ! -f /etc/systemd/system/ecodetect-backend.service ]; then
+            echo "Creating systemd service file"
+            sudo bash -c 'cat > /etc/systemd/system/ecodetect-backend.service << EOL
+          [Unit]
+          Description=EcoDetect Backend Service
+          After=network.target
+
+          [Service]
+          User=${USER}
+          WorkingDirectory=/home/${USER}/ecodetect
+          ExecStart=/home/${USER}/ecodetect/venv/bin/python /home/${USER}/ecodetect/backend_mobile.py
+          Restart=always
+          Environment="PYTHONPATH=/home/${USER}/ecodetect"
+    
+          [Install]
+          WantedBy=multi-user.target
+          EOL'
+
             sudo systemctl daemon-reload
-            sudo systemctl enable ecodetect backend
+            sudo systemctl enable ecodetect-backend
           fi 
 
           # Restarts service
           sudo systemctl restart ecodetect-backend
 
           # Checking service status
-          sudo systemctl status ecodetec-backend --no-pager
+          sudo systemctl status ecodetect-backend --no-pager
 
           # Cleanup deployment zip
           rm ~/ecodetect_backend.zip
