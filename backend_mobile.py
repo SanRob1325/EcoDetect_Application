@@ -3,7 +3,6 @@ from flask import Flask,jsonify,request,g
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
-from sense_hat import SenseHat
 from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
 import pymongo
@@ -26,6 +25,72 @@ from statsmodels.tsa.arima.model import ARIMA
 import time
 import uuid
 import sys
+
+# Mock data to be handled in EC2 deployment
+try:
+    from sense_hat import SenseHat
+    SENSE_HAT_AVAILABILITY = True
+except ImportError:
+    SENSE_HAT_AVAILABILITY = False
+    logging.warning("Sense HAT hardare is not detected. Using mock implementation")
+
+class FlexibleSenseHat:
+    def __init__(self):
+        self._real_sensor = None
+        if SENSE_HAT_AVAILABILITY:
+            try:
+                self._real_sensor = SenseHat()
+            except Exception as e:
+                logging.error(f"Error initialising SENSE HAT: {e}")
+                SENSE_HAT_AVAILABILITY = False
+
+    def _get_method(self, method_name):
+        if SENSE_HAT_AVAILABILITY and self._real_sensor:
+            return getattr(self._real_sensor, method_name)
+
+        # Mock implmentations
+        def mock_temperature():
+            return 22.0
+        
+        def mock_humidity():
+            return 50.0
+        
+        def mock_pressure():
+            return 1013.25
+        
+        def mock_accelerometer_raw():
+            return {"x": 0, "y": 0, "z": 0}
+        
+        def mock_gyroscope_raw():
+            return {"x": 0, "y": 0, "z": 0}
+        
+        def mock_compass_raw():
+            return {"x": 0, "y": 0, "z": 0}
+        
+        def mock_clear(*args, **kwargs):
+            pass
+
+        def mock_show_message(*args, **kwargs):
+            pass
+
+        mock_methods = {
+            'get_temperature': mock_temperature,
+            'get_humidity': mock_humidity,
+            'get_pressure': mock_pressure,
+            'get_accelerometer_raw': mock_accelerometer_raw,
+            'get_gyroscope_raw': mock_gyroscope_raw,
+            'get_compass_raw': mock_compass_raw,
+            'clear': mock_clear,
+            'show_message': mock_show_message
+        }
+
+        return mock_methods.get(method_name, lambda *args, **kwargs: None)
+    
+    def _getattr_(self, name):
+        method = self._get_method(name)
+        return method
+
+
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
@@ -69,7 +134,7 @@ APP_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
 #Retrieve thresholds if the defauls are not set
 thresholds = thresholds_collection.find_one()
 #Sense Hat temperature, humidity, pressure    
-sensor = SenseHat()
+sensor = FlexibleSenseHat()
 #prints thresholds for testing puposes
 print(thresholds)
 #SENSE-HAT is initailised for sensor readings
