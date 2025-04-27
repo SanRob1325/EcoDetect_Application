@@ -95,6 +95,7 @@ jobs:
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_USER: ${{ secrets.EC2_USER }}
       run: |
         # Prepare SSH
         mkdir -p ~/.ssh
@@ -106,7 +107,7 @@ jobs:
         scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
 
         # Deployinh to remote server
-        ssh -i ~/.ssh/deploy_key $EC2_USER@EC2_HOST << 'DEPLOY_SCRIPT'
+        ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'DEPLOY_SCRIPT'
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
@@ -140,26 +141,26 @@ jobs:
           ls -t | tail -n +6 | xargs rm -rf
         DEPLOY_SCRIPT
   
-    validate-deployment:
-      name: Validate Deployment
-      needs: build-and-deploy
-      runs-on: ubuntu-latest
-      steps:
-      - name: Health Check
-        run: |
-          # Waits for the deployment
-          sleep 30
+  validate-deployment:
+    name: Validate Deployment
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Health Check
+      run: |
+        # Waits for the deployment
+        sleep 30
 
-          # Performs health check 
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://${ secrets.EC2_HOST }}/api/health)
+        # Performs health check 
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.EC2_HOST }}/api/health)
 
-          if [ $RESPONSE -eq 200 ]; then
-            echo "Deployment successful , health check passed."
-            exit 0
-          else 
-            echo "Health check failed. Response code: $RESPONSE "
-            exit 1
-          fi
+        if [ $RESPONSE -eq 200 ]; then
+          echo "Deployment successful, health check passed."
+          exit 0
+        else 
+          echo "Health check failed. Response code: $RESPONSE "
+          exit 1
+        fi
 
 
 
