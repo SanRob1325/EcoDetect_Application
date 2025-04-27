@@ -8,13 +8,13 @@ from decimal import Decimal
 #Set up Logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
+# Reference and inspiration for alert system: https://medium.com/@vishvratnashegaonkar27/sending-notifications-with-aws-sns-using-python-and-boto3-4c48bb51710
 class AlertService:
     """Manage alert generation, delivery, and tracking based on sensor thresholds"""
     
-    # Cahche alerts to prevent duplicates 
+    # Cache alerts to prevent duplicates 
     _alert_cache = {}
-    _CACHE_TTL = 15 * 60 # Aound 15 minutes in seconds
+    _CACHE_TTL = 15 * 60 # Around 15 minutes in seconds
     
     def __init__(self,sns_client=None,ses_client=None,dynamodb=None,mongo_db=None):
         """Initailaise the alert Service with AWS clients ad database connections"""
@@ -97,7 +97,7 @@ class AlertService:
         
             print(f"DEBUG: Processed sensor data: {sensor_data}")
 
-            # Rest of the method with debug output...
+            # Rest of the method with the debug output for fixing bugs
             if 'temperature' in sensor_data and 'temperature_range' in thresholds:
                 temp = sensor_data['temperature']
                 temp_range = thresholds['temperature_range']
@@ -165,7 +165,7 @@ class AlertService:
             if mongo_thresholds is not None:
                 return mongo_thresholds
             
-        # Then try DynamoDB
+        # Then the method tries DynamoDB for sensor values
         try:
             response = self.threshold_table.scan()
             if response.get('Items'):

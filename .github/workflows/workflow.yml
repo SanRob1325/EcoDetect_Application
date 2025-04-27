@@ -69,217 +69,101 @@ jobs:
         directory: ./
         fail_ci_if_error: false
   
-  build:
-    name: Build
+  build-and-deploy:
+    name: Build and Deploy Backend
     needs: test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    # Build frontend
-    - name: Set Up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '16'
-    
-    - name: Install Frontend Dependencies
-      run: |
-        cd ./sensor-frontend
-        npm install
-
-    - name: Install Frontend Build
-      run: |
-        cd ./sensor-frontend
-        npm run build
-    - name: Create PWA manifest and service worker
-      run: |
-        cd ./sensor-frontend
-        # Create manifest.json for PWA
-        echo '{
-        "short_name": "EcoDetect",
-        "name": "EcoDetect Environmental Monitoring",
-        "icons": [
-          {
-            "src": "favicon.ico",
-            "sizes": "64x64",
-            "type": "image/x-icon"
-          },
-          {
-            "src": "logo192.png",
-            "type": "image/png",
-            "sizes": "192x192"
-          },
-          {
-            "src": "logo512.png",
-            "type": "image/png",
-            "sizes": "512x512"
-          }  
-        ],
-        "start_url": ".",
-        "display": "standalone",
-        "theme_color": "#388E3C",
-        "background_color": "#F1F8E9"
-        }' > ./public/manifest.json  
-
     - name: Package backend
       run: |
-          zip -r backend.zip ./* --exclude="sensor-frontend/*" --exclude=".github/*" 
-    - name: Package frontend
-      run: |
-          cd sensor-frontend
-          zip -r ../sensor-frontend.zip build/*
-    
-    - name: Upload backend artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: backend
-        path: backend.zip
+          mkdir -p deploy
+          cp -r *.py requirements.txt deploy/
+          cp -r app_modules deploy/
+          cp -r migrations deploy/
 
-    - name: Upload frontend artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: sensor-frontend
-        path: sensor-frontend.zip
-    
-    - name: Install React Native dependencies
-      run: |
-        cd sensor-frontend
-        npm install -g react-native-cli
-        npm install
-    
-    - name: Build React Native for Android
-      run: |
-        cd sensor-frontend/android
-        ./gradlew assembleRelease
-    
-    - name: Package APK (Android)
-      run: |
-        cd sensor-frontend
-        # Zip the APK
-        zip -r ../android-app.zip android/app/build/outputs/apk/release/*
-    
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-app
-        path: android-app.zip
-  
-  deploy-dev:
-    name: Deploy to EC2
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'  && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') 
-    steps:
-    - name: Download backend artifacts
-      uses: actions/download-artifact@v4
-      with: 
-        name: backend
+          # Creates deployment configuration
 
-    - name: Download frontend artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: sensor-frontend
-        
-    - name: Install SSH key
-      uses: shimataro/ssh-key-action@v4
-      with:
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        known_hosts: ${{ secrets.KNOWN_HOSTS }}
+          echo "Python Flask Backend deployment" > deploy/DEPLOY_README.md
 
-    - name: Deploy to AWS EC2 
+          cd deploy
+          zip -r ../backend_deployment.zip .
+    
+
+    - name: Deploy to EC2
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
-        # Transfer files
-        scp backend.zip ${{ secrets.EC2_USER}}@${{ secrets.EC2_HOST }}:~/
-        scp sensor-frontend.zip ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST}}:~/
+        # Prepare SSH
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        # Deploy commands
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOL'
-          # stop services
-          sudo systemctl stop ecodetect-backend || true
+        # Copy deploymentt package 
+        scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
+
+        # Deployinh to remote server
+        ssh -i ~/.ssh/deploy_key $EC2_USER@EC2_HOST << 'DEPLOY_SCRIPT'
+          # Creates a backup
+          TIMESTAMP=$(date +"%Y%m_%H%M%S")
+          mkdir -p ~/ecodetect_backups
           
-          # Backup previous deployment
-          timestamp=$(date +%Y%m%d%H%M%S)
-          mkdir -p ~/backups/$timestamp/
-
-          if [ -d ~/backend ]; then
-            cp -r ~/backend ~backups/$timestamp/
+          if [ -d ~/ecodetect ]; then
+            cp -r ~/ecodetect ~/ecodetect_backups/backup_$TIMESTAMP
           fi
 
-          if [ -d ~/sensor-frontend-build ]; then
-            cp -r ~/sensor-frontend-build ~/backups/$timestamp/
-          fi
+          # Removes existing deployment
+          rm -rf ~/ecodetect 
+          mkdir -p ~/ecodetect
 
-          # Deploy backend
-          rm -rf ~/backend
-          mkdir -p ~/backend
-          unzip -o ~/backend.zip -d ~/backend
+          # Unzip new deployment
+          unzip ~/ecodetect_backend.zip -d ~/ecodetect
+
+          # Setup Python virtual environment
+          python3 -m venv ~/ecodetect/venv
+          source ~/ecodetect/venv/bin/activate
+
           # Install dependencies
-          cd ~/backend
-          pip3 install -r requirements.txt
+          pip install --upgrade pip
+          pip install -r ~/ecodetect/requirements.txt
 
-          # Deploy frontend
-          rm -rf ~/sensor-frontend-build
-          mkdir -p ~/sensor-frontend-build
-          unzip -o ~/sensor-frontend.zip -d ~/sensor-frontend-build
-
-          # Restart services
-          sudo systemctl restart nginx
-          sudo systemctl start ecodetect-backend
-          sudo systemctl enable ecodetect-backend
-
-          # Cleanup
-          rm ~/backend.zip
-          rm ~/sensor-frontend.zip
-
-          # Purging old backups
-          cd ~/backups
-          ls -t | tail -n +6 | xargs rm -rf
-        EOL
-    
-    
-  deploy-prod:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-
-    steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with: 
-        name: backend
-        path: ./backend
-
-    - name: Download frontend build
-      uses: actions/download-artifact@v4
-      with:
-        name: sensor-frontend
-        path: ./sensor-frontend
-  
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-1
-  
-    - name: Deploy to EC2 Production
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.PROD_HOST }}
-        username: ${{ secrets.PROD_USERNAME }}
-        key: ${{ secrets.PROD_SSH_KEY }}
-        source: "./backend"
-        target: "/var/www/ecodetect"
-  
-    - name: Restart Services
-      uses: appleboy/ssh-action@master
-      with: 
-        host: ${{ secrets.PROD_HOST}}
-        username: ${{ secrets.PROD_USERNAME }}
-        key: ${{ secrets.PROD_SSH_KEY }}
-        script: |
-          cd /var/www/ecodetect
           sudo systemctl restart ecodetect-backend
-          sudo systemctl restart nginx
+
+          # Cleanup deployment zip
+          rm ~/ecodetect_backend.zip
+
+          # Remove old backups, keep the last 5 for in case of future errors
+          cd ~/ecodetect_backups
+          ls -t | tail -n +6 | xargs rm -rf
+        DEPLOY_SCRIPT
+  
+    validate-deployment:
+      name: Validate Deployment
+      needs: build-and-deploy
+      runs-on: ubuntu-latest
+      steps:
+      - name: Health Check
+        run: |
+          # Waits for the deployment
+          sleep 30
+
+          # Performs health check 
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://${ secrets.EC2_HOST }}/api/health)
+
+          if [ $RESPONSE -eq 200 ]; then
+            echo "Deployment successful , health check passed."
+            exit 0
+          else 
+            echo "Health check failed. Response code: $RESPONSE "
+            exit 1
+          fi
+
+
+
+          
+      
         
+    
