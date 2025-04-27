@@ -106,6 +106,11 @@ jobs:
 
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'DEPLOY_SCRIPT'
+
+          # Installing rquired packages
+          sudo apt-get update
+          sudo apt-get install -y unzip python3-venv
+
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
@@ -129,7 +134,18 @@ jobs:
           pip install --upgrade pip
           pip install -r ~/ecodetect/requirements.txt
 
+          if [ ! -f /etc/systemd/system/ecodetect-backend.service]; then
+            echo "Creating systemd serivce file"
+            sudo tee /etc/systemd/system/ecodetect-backend.service > /dev/null << 'SERVICE'
+            sudo systemctl daemon-reload
+            sudo systemctl enable ecodetect backend
+          fi 
+
+          # Restarts service
           sudo systemctl restart ecodetect-backend
+
+          # Checking service status
+          sudo systemctl status ecodetec-backend --no-pager
 
           # Cleanup deployment zip
           rm ~/ecodetect_backend.zip
