@@ -89,6 +89,10 @@ jobs:
           cd deploy 
           zip -r ../backend_deployment.zip .
 
+    - name: Create service file 
+      run: |
+        cat > ecodetect-backend.service << 'EOF'
+
     - name: Deploy to EC2
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -105,8 +109,7 @@ jobs:
         scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
 
         # Deploying to remote server
-        ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'DEPLOY_SCRIPT'
-
+        ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST '
           # Installing required packages
           sudo apt-get update
           sudo apt-get install -y unzip python3-venv
@@ -114,64 +117,50 @@ jobs:
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
-          
+
           if [ -d ~/ecodetect ]; then
             cp -r ~/ecodetect ~/ecodetect_backups/backup_$TIMESTAMP
           fi
 
           # Removes existing deployment
-          rm -rf ~/ecodetect 
+          rm -rf ~/ecodetect
           mkdir -p ~/ecodetect
 
-          # Unzip new deployment
           unzip ~/ecodetect_backend.zip -d ~/ecodetect
 
-          # Setup Python virtual environment
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
 
-          # Install dependencies
+          # Installing dependencies
           pip install --upgrade pip
           pip install -r ~/ecodetect/requirements.txt
 
-          if [ ! -f /etc/systemd/system/ecodetect-backend.service ]; then
-            echo "Creating systemd service file"
-            
-            sudo tee /etc/systemd/system/ecodetect-backend.service > /dev/null << EOF
-          [Unit]
-          Description=EcoDetect Backend Service
-          After=network.target
+          # Running application directly in the background 
+          cd ~/ecodetect
+          nohup python backend_mobile.py > flask.log 2>&1 &
 
-          [Service]
-          User=ubuntu
-          WorkingDirectory=/home/ubuntu/ecodetect
-          ExecStart=/home/ubuntu/ecodetect/venv/bin/python /home/ubuntu/ecodetect/backend_mobile.py
-          Restart=always
-          Environment="PYTHONPATH=/home/ubuntu/ecodetect
-    
-          [Install]
-          WantedBy=multi-user.target"
-          EOF
-            
-            chmod +x ~/ecodetect/backend_mobile.py          
-            sudo systemctl daemon-reload
-            sudo systemctl enable ecodetect-backend
-          fi 
+          # Storing PID
+          echo $! > ~/ecodetect/app.pid
 
-          # Restarts service
-          sudo systemctl restart ecodetect-backend
+          # Wait for application to start
+          sleep 5
 
-          # Checking service status
-          sudo systemctl status ecodetect-backend --no-pager
+          # Check if the application is running
+          if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
+            echo "Application started successfully"
+          else
+            echo "Application failed to start"
+            cat flask.log
+            exit 1
+          fi
 
-          # Cleanup deployment zip
+          # Cleans up deployment zip
           rm ~/ecodetect_backend.zip
 
-          # Remove old backups, keep the last 5 for in case of future errors
+          # Removes the old backups and keeps the last 5 for logging future errors
           cd ~/ecodetect_backups
-          ls -t | tail -n +6 | xargs rm -rf
-        DEPLOY_SCRIPT
-  
+          ls -t | tail -n +6 | xargs rm -rf     
+        '
   validate-deployment:
     name: Validate Deployment
     needs: build-and-deploy
