@@ -147,7 +147,7 @@ jobs:
           WorkingDirectory=/home/ubuntu/ecodetect
           ExecStart=/home/ubuntu/ecodetect/venv/bin/python /home/ubuntu/ecodetect/backend_mobile.py
           Restart=always
-          Environment="PYTHONPATH=/home/ubuntu/ecodetect"
+          Environment="PYTHONPATH=/home/ubuntu/ecodetect
     
           [Install]
           WantedBy=multi-user.target"
