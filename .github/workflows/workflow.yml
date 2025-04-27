@@ -37,6 +37,9 @@ jobs:
     - name: Install backend dependencies
       run: |
         python -m pip install --upgrade pip
+        sudo apt-get update
+        sudo apt-get install -y python3-dev libatlas-base-dev raspberrypi-kernel-headers
+        pip install RTIMULib
         pip install -r requirements.txt
         pip install pytest pytest-cov
     - name: Create dummy cert files for MQTT
@@ -119,12 +122,12 @@ jobs:
           if [ -d ~/ecodetect_backups ]; then
             rm -rf ~/ecodetect_backups/*
           fi
-          
+
           # Show available disk 
           df -h
           # Installing required packages
           sudo apt-get update
-          sudo apt-get install -y unzip python3-venv
+          sudo apt-get install -y unzip python3-venv python3-dev libatlas-base-dev raspberrypi-kernel-headers
 
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
@@ -145,6 +148,7 @@ jobs:
 
           # Installing dependencies
           pip install --upgrade pip
+          pip install RTIMULib
           pip install -r ~/ecodetect/requirements.txt
 
           # Running application directly in the background 
