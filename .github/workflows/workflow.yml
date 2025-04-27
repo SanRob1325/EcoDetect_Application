@@ -79,17 +79,15 @@ jobs:
     - name: Package backend
       run: |
           mkdir -p deploy
-          cp -r *.py requirements.txt deploy/
-          cp -r app_modules deploy/
-          cp -r migrations deploy/
+          cp backend.py backend_mobile.py alert_service.py reports.py auth_middleware.py validation_utlis.py deploy/
+        
+          # Copy requirements file
+          cp requirements.txt deploy/
 
-          # Creates deployment configuration
+          echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
 
-          echo "Python Flask Backend deployment" > deploy/DEPLOY_README.md
-
-          cd deploy
-          zip -r ../backend_deployment.zip .
-    
+          cd deploy 
+          zip -r ../backend_deployment.zip
 
     - name: Deploy to EC2
       env:
@@ -106,7 +104,7 @@ jobs:
         # Copy deploymentt package 
         scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
 
-        # Deployinh to remote server
+        # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'DEPLOY_SCRIPT'
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
