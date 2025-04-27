@@ -2,6 +2,9 @@
 flask
 flask-cors
 
+# Sense HAT
+sense-hat
+
 # AWS SDK
 boto3
 botocore
