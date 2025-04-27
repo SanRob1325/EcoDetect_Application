@@ -3,8 +3,8 @@ flask
 flask-cors
 
 # Sense HAT
-sense-hat
-
+sense-hat==2.6.0
+RTIMULib==7.2.1
 # AWS SDK
 boto3
 botocore
