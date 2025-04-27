@@ -136,21 +136,21 @@ jobs:
 
           if [ ! -f /etc/systemd/system/ecodetect-backend.service ]; then
             echo "Creating systemd service file"
-            sudo bash -c 'cat > /etc/systemd/system/ecodetect-backend.service << EOL
+            sudo tee /etc/systemd/system/ecodetect-backend.service > /dev/null << EOF
           [Unit]
           Description=EcoDetect Backend Service
           After=network.target
 
           [Service]
-          User=${USER}
-          WorkingDirectory=/home/${USER}/ecodetect
-          ExecStart=/home/${USER}/ecodetect/venv/bin/python /home/${USER}/ecodetect/backend_mobile.py
+          User=$USER
+          WorkingDirectory=/home/$USER/ecodetect
+          ExecStart=/home/$USER/ecodetect/venv/bin/python /home/$USER/ecodetect/backend_mobile.py
           Restart=always
-          Environment="PYTHONPATH=/home/${USER}/ecodetect"
+          Environment="PYTHONPATH=/home/$USER/ecodetect"
     
           [Install]
           WantedBy=multi-user.target
-          EOL'
+          EOF'
 
             sudo systemctl daemon-reload
             sudo systemctl enable ecodetect-backend
