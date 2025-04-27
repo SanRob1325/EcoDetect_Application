@@ -87,7 +87,7 @@ jobs:
           echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
 
           cd deploy 
-          zip -r ../backend_deployment.zip
+          zip -r ../backend_deployment.zip .
 
     - name: Deploy to EC2
       env:
