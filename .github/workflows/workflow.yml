@@ -86,61 +86,8 @@ jobs:
           # Copy requirements file
           cp requirements.txt deploy/
           echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
-
-          if [ -f .env ]; then
-            echo "Existing .env file found in root"
-            cp .env deploy/.env
-          fi
-
-          # Creates a .env file for production
-          cat > deploy/.env << EOF
-          AWS_REGION=eu-west-1
-          # MongoDB
-          MONGO_URI=${{ secrets.MONGO_URI }}
-          NODE_PATH=src/
-          EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
-          EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
-          USER_PHONE_NUMBER=${{ secrets.USER_PHONE_NUMBER }}
-          IOT_ENDPOINT=${{ secrets.IOT_ENDPOINT }}
-          THING_NAME=EcoDetectThing
-          IOT_TOPIC=ecodetect/water
-          IOT_ENDPOINT2=${{ secrets.IOT_ENDPOINT2 }}
-          THING_NAME2=Main_Pi
-          IOT_TOPIC2=ecodetect/sensehat
-          CERTIFICATE_PATH2=${{ secrets.CERTIFICATE_PATH2 }}
-          PRIVATE_KEY_PATH2=${{ secrets.PRIVATE_KEY_PATH2 }}
-          ROOT_CA_PATH2=${{ secrets.ROOT_CA_PATH2 }}
-          CERTIFICATE_PATH=${{ secrets.CERTIFICATE_PATH }}
-          PRIVATE_KEY_PATH=${{ secrets.PRIVATE_KEY_PATH }}
-          ROOT_CA_PATH=${{ secrets.ROOT_CA_PATH }}
-          # SMS and Email setup
-          SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}
-          SES_EMAIL_SENDER=${{ secrets.SES_EMAIL_SENDER }}
-          SES_EMAIL_RECIPIENT=${{ secrets.SES_EMAIL_RECIPIENT }}
-          # DynamoDB setup 
-          SENSEHAT_TABLE=SenseHatData
-          WATER_TABLE=WaterFlowData
-          THRESHOLD_TABLE=Thresholds
-          REPORT_BUCKET=reports-ecodetect
-          SENSEHAT_DATA_KEY=carbon_footprint_training_sensehat.csv
-          WATERFLOW_DATA_KEY=carbon_footprint_training_waterflow.csv
-          PREFERENCES_TABLE=UserPreferences
-          EOF
-
-          echo "Contents of .env file"
-          cat deploy/.env
-
-          echo "Deploy directory contents"
-          ls -la deploy/
-          
-          # Create zip
           cd deploy 
           zip -r ../backend_deployment.zip .
-
-          # Verify zip contents
-          cd ..
-          unzip -l backend_deployment.zip
-          
     - name: Deploy to EC2
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -152,128 +99,48 @@ jobs:
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
-        
-        ls -lh backend_deployment.zip
-
         # Copy deployment package 
-        scp -v -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
-        
+        scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST '
-          # List contents before unziping
-          pwd
-          ls -la
-
-          rm -rf ~/ecodetect
-          mkdir -p ~/ecodetect
-
-          # Unzip deployment package
-          unzip -v ~/ecodetect_backend.zip -d ~/ecodetect
-
-          echo "Contents after unzipping"
-          ls -la ~/ecodetect
-
-          # Ensuring .env file exists
-          if [ ! -f ~/ecodetect/.env ]; then
-            echo "error: .env file is missing"
-            echo "Creating temporary .env file with defualt settigns"
-            cat > ~/ecodetect/.env << EOL
-        MONGO_URI=mongodb://localhost:27017/
-        EOL
-          fi
-
-          chmod 644 ~/ecodetect/.env
-
-          echo "Contents of .env file:"
-          cat ~/ecodetect/.env
-
           # Clear package cache to free up space
           sudo apt-get clean
           sudo apt-get autoremove -y
           # Cleans up old Python cache files
           find ~/ -name "__pycache__" -type d -exec rm -rf {} \; 2>/dev/null || true
           find ~/ -name "*.pyc" -delete 2>/dev/null || true
-
           # Clean old backups if any directory exists
           if [ -d ~/ecodetect_backups ]; then
             rm -rf ~/ecodetect_backups/*
           fi
-
           # Show available disk 
           df -h
-
           # Installing required packages
           sudo apt-get update
           sudo apt-get install -y unzip python3-venv python3-dev libatlas-base-dev 
-
-          # setup MongoDB
-          echo "Setting Up MongoDB:"
-          sudo apt-get install -y docker.io
-          sudo systemctl enable docker
-          sudo systemctl start docker
-
-          if sudo docker ps -a | grep mongodb; then
-            echo "MongoDB container exists, initialising it"
-            sudo docker start mongodb
-          else
-            echo "Creating new MongoDB container"
-            sudo docker run -d --name mongodb -p 27017:27017 mongo:4.4
-          fi 
-
-          # Verify MongoDB in Docker is running
-          sudo docker ps | grep mongodb || echo "MongoDB containerr not running"
-
-          echo "Testing MongoDB connection"
-          sudo apt-get install -y netcat
-          nc -zv localhost 27017 || echo "Cannot connect to MongoDB on port 27017"
-
-          # Ensures  the correct MongoDB URI is shown
-          export MONGO_URI="mongodb://localhost:27017/"
-          echo "Setting MONGO_URI=$MONGO_URI"
-
-
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
           if [ -d ~/ecodetect ]; then
             cp -r ~/ecodetect ~/ecodetect_backups/backup_$TIMESTAMP
           fi
-
           # Removes existing deployment
           rm -rf ~/ecodetect
           mkdir -p ~/ecodetect
           unzip ~/ecodetect_backend.zip -d ~/ecodetect
-
-                    
-          if [ -f ~/ecodetect/.env ]; then
-            sed -i 's|MONGO_URI=.*|MONGO_URI=mongodb://localhost:27017/|' ~/ecodetect/.env
-          else
-            echo ".env file not found"
-          fi
-
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
-
           # Installing dependencies
           pip install --upgrade pip
           pip install RTIMULib
           pip install -r ~/ecodetect/requirements.txt
-
           # Running application directly in the background 
           cd ~/ecodetect
-
-          # load env
-          set -a
-          source ~/ecodetect/.env
-          set +a
           nohup python backend_mobile.py > flask.log 2>&1 &
-
           # Storing PID
           echo $! > ~/ecodetect/app.pid
-          
           # Wait for application to start
           sleep 5
-
           # Check if the application is running
           if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
             echo "Application started successfully"
@@ -282,12 +149,10 @@ jobs:
             cat flask.log
             exit 1
           fi
-
           # Cleans up deployment zip
           rm ~/ecodetect_backend.zip
-
           # Removes the old backups and keeps the last 5 for logging future errors
           cd ~/ecodetect_backups
           ls -t | tail -n +6 | xargs rm -rf     
         '
- 
+  
