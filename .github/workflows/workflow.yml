@@ -164,6 +164,10 @@ jobs:
           pwd
           ls -la
 
+          rm -rf ~/ecodetect
+          mkdir -p ~/ecodetect
+
+          # Unzip deployment package
           unzip -v ~/ecodetect_backend.zip -d ~/ecodetect
 
           echo "Contents after unzipping"
@@ -174,8 +178,8 @@ jobs:
             echo "error: .env file is missing"
             echo "Creating temporary .env file with defualt settigns"
             cat > ~/ecodetect/.env << EOL
-          MONGO_URI=mongodb://localhost:27017/
-            EOL
+        MONGO_URI=mongodb://localhost:27017/
+        EOL
           fi
 
           chmod 644 ~/ecodetect/.env
