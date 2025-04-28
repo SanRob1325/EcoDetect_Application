@@ -171,6 +171,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip python3-venv python3-dev libatlas-base-dev 
 
+          # setup MongoDB
+          echo "Setting Up MongoDB:"
+          sudo apt-get install -y docker.io
+          sudo systemctl enable docker
+          sudo systemctl start docker
+
+          if sudo docker ps -a | grep mongodb; then
+            echo "MongoDB container exists, initialising it"
+            sudo docker start mongodb
+          else
+            echo "Creating new MongoDB container"
+            sudo docker run -d --name mongodb -p 27017:27017 mongo:4.4
+          fi 
+
+          # Verify MongoDB in Docker is running
+          sudo docker ps | grep mongodb || echo "MongoDB containerr not running"
+
+          echo "Testing MongoDB connection"
+          sudo apt-get install -y netcat
+          nc -zv localhost 27017 || echo "Cannot connect to MongoDB on port 27017"
+
+          # Ensures  the correct MongoDB URI is shown
+          export MONGO_URI="mongodb://localhost:27017/"
+          echo "Setting MONGO_URI=$MONGO_URI"
+
+
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
@@ -182,6 +208,10 @@ jobs:
           rm -rf ~/ecodetect
           mkdir -p ~/ecodetect
           unzip ~/ecodetect_backend.zip -d ~/ecodetect
+
+                    
+          sed -i 's|MONGO_URI=.*|MONGO_URI=mongodb://localhost:27017/|' ~/ecodetect/.env
+
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
 
