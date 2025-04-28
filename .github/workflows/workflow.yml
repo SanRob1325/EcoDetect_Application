@@ -166,13 +166,37 @@ jobs:
         EC2_HOST: ${{ secrets.EC2_HOST}}
       run: |
         # Waits for the deployment
-        sleep 30
+        sleep 45
+
+        echo "Checking host reachability:"
+        ping -c 4 $EC2_HOST || echo "Host not reachable"
+
+        echo "Checking port 5000:"
+        nc -z -v -w5 $EC2_HOST 5000 || echo "Port 5000 not open"
+
         # Performs health check 
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST:5000/api/health --connect-timeout 10)
-        if [ $RESPONSE -eq 200 ]; then
+        CURL_EXIT_CODE=$?
+
+        echo "Curl exit code: $CURL_EXIT_CODE"
+        echo "HTTP Response code: $RESPONSE"
+
+        # Display curl response details
+        echo "Curl output:"
+        cat curl_response.txt
+
+        echo "Network interface information:"
+        ip addr
+
+        echo "Routing table"
+        ip route
+        echo "Listening ports:"
+        sudo netstat -tuln
+
+        if [ $CURL_EXIT_CODE -eq 0 ] && [ $RESPONSE -eq 200 ]; then
           echo "Deployment successful, health check passed."
           exit 0
         else 
-          echo "Health check failed. Response code: $RESPONSE "
+          echo "Health check failed. Curl exit code: $CURL_EXIT_CODE, Response code: $RESPONSE "
           exit 1
         fi
