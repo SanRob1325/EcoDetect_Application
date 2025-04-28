@@ -150,7 +150,7 @@ jobs:
 
           # Installing dependencies
           pip install --upgrade pip
-          pip install RTIMULib
+          # pip install RTIMULib
           pip install -r ~/ecodetect/requirements.txt
 
           pip install pytest flask boto3 pymongo
@@ -167,13 +167,32 @@ jobs:
           # Wait for application to start
           sleep 10
 
+          # Chck application status
+          echo "Checkin application status"
+          if [ -f flask.log ]; then
+            echo "--- Log File contents ---"
+            cat flask.log
+          else
+            echo "Log file does not exist"
+          fi
+
+          echo "Checking Python version and path"
+          ./venv/bin/python --version
+          which ./venv/bin/python
+
+          echo "Checking if backend_mobile.py exists"
+          ls -l backend_mobile.py
+
+          echo "Checking virtual envrionment activation..."
+          echo $VIRTUAL_ENV
+
           # Check if the application is running
           if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
             echo "Application started successfully"
-            cat flask.log
           else
             echo "Application failed to start"
-            cat flask.log
+            echo "Detailed error:"
+            ./venv.bin/python -m pytest backend_mobile.py
             exit 1
           fi
 
