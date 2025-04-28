@@ -87,6 +87,11 @@ jobs:
           cp requirements.txt deploy/
           echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
 
+          if [ -f .env ]; then
+            echo "Existing .env file found in root"
+            cp .env deploy/.env
+          fi
+
           # Creates a .env file for production
           cat > deploy/.env << EOF
 
@@ -131,8 +136,19 @@ jobs:
           PREFERENCES_TABLE=UserPreferences
           EOF
 
+          echo "Contents of .env file"
+          cat deploy/.env
+
+          echo "Deploy directory contents"
+          ls -la deploy/
+          
+          # Create zip
           cd deploy 
           zip -r ../backend_deployment.zip .
+
+          # Verify zip contents
+          cd ..
+          unzip -l backend_deployment.zip
           
     - name: Deploy to EC2
       env:
@@ -145,12 +161,37 @@ jobs:
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+        
+        ls -lh backend_deployment.zip
 
         # Copy deployment package 
-        scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
+        scp -v -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
         
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST '
+          # List contents before unziping
+          pwd
+          ls -la
+
+          unzip -v ~/ecodetect_backend.zip -d ~/ecodetect
+
+          echo "Contents after unzipping"
+          ls -la ~/ecodetect
+
+          # Ensuring .env file exists
+          if [ ! -f ~/ecodetect/.env ]; then
+            echo "error: .env file is missing"
+            echo "Creating temporary .en file with defualt settigns"
+            cat > ~/ecodetect/.env << EOL
+
+            MONGO_URI=mongodb://localhost:27017/
+            EOL
+          fi
+
+          chmod 644 ~/ecodetect/.env
+
+          echo "Contents of .env file:"
+          cat ~/ecodetect/.env
 
           # Clear package cache to free up space
           sudo apt-get clean
@@ -215,7 +256,7 @@ jobs:
           else
             echo ".env file not found"
           fi
-          
+
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
 
