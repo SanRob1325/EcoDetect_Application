@@ -94,12 +94,9 @@ jobs:
 
           # Creates a .env file for production
           cat > deploy/.env << EOF
-
           AWS_REGION=eu-west-1
-
           # MongoDB
           MONGO_URI=${{ secrets.MONGO_URI }}
-
           NODE_PATH=src/
           EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}
           EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
@@ -107,25 +104,19 @@ jobs:
           IOT_ENDPOINT=${{ secrets.IOT_ENDPOINT }}
           THING_NAME=EcoDetectThing
           IOT_TOPIC=ecodetect/water
-
           IOT_ENDPOINT2=${{ secrets.IOT_ENDPOINT2 }}
           THING_NAME2=Main_Pi
           IOT_TOPIC2=ecodetect/sensehat
-
           CERTIFICATE_PATH2=${{ secrets.CERTIFICATE_PATH2 }}
           PRIVATE_KEY_PATH2=${{ secrets.PRIVATE_KEY_PATH2 }}
           ROOT_CA_PATH2=${{ secrets.ROOT_CA_PATH2 }}
-
           CERTIFICATE_PATH=${{ secrets.CERTIFICATE_PATH }}
           PRIVATE_KEY_PATH=${{ secrets.PRIVATE_KEY_PATH }}
           ROOT_CA_PATH=${{ secrets.ROOT_CA_PATH }}
-          
-          
           # SMS and Email setup
           SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}
           SES_EMAIL_SENDER=${{ secrets.SES_EMAIL_SENDER }}
           SES_EMAIL_RECIPIENT=${{ secrets.SES_EMAIL_RECIPIENT }}
-
           # DynamoDB setup 
           SENSEHAT_TABLE=SenseHatData
           WATER_TABLE=WaterFlowData
@@ -181,10 +172,9 @@ jobs:
           # Ensuring .env file exists
           if [ ! -f ~/ecodetect/.env ]; then
             echo "error: .env file is missing"
-            echo "Creating temporary .en file with defualt settigns"
+            echo "Creating temporary .env file with defualt settigns"
             cat > ~/ecodetect/.env << EOL
-
-            MONGO_URI=mongodb://localhost:27017/
+          MONGO_URI=mongodb://localhost:27017/
             EOL
           fi
 
