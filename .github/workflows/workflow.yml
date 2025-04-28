@@ -166,32 +166,44 @@ jobs:
         EC2_HOST: ${{ secrets.EC2_HOST}}
       run: |
         # Waits for the deployment
-        sleep 45
+        sleep 60
 
+        echo "Detailed Network diagnostic started:"
+
+        echo "Resolving host:"
+        host $EC2_HOST || echo "DNS resolution failed"
+
+        # IP information
+        echo "IP address for host:"
+        dig +short $EC2_HOST || echo "dig failed"
+
+        # Traceroute
+        echo "Trace route to host:"
+        traceroute $EC2_HOST || echo "Traceroute failed"
+        
         echo "Checking host reachability:"
-        ping -c 4 $EC2_HOST || echo "Host not reachable"
+        ping -c 10 $EC2_HOST || echo "Host not reachable"
 
         echo "Checking port 5000:"
-        nc -z -v -w5 $EC2_HOST 5000 || echo "Port 5000 not open"
+        timeout 10 bash -c "until nc -z -v $EC2_HOST 5000; do sleep 1; done" || echo "Port 5000 not open"
+        
+        
+        # Curl output
+        echo "Detailed curl diagnostic"
+        curl -v http://$EC2_HOST:5000/api/health || echo "Curl failed with output"
 
-        # Performs health check 
-        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST:5000/api/health --connect-timeout 10)
-        CURL_EXIT_CODE=$?
-
-        echo "Curl exit code: $CURL_EXIT_CODE"
-        echo "HTTP Response code: $RESPONSE"
-
-        # Display curl response details
-        echo "Curl output:"
-        cat curl_response.txt
-
-        echo "Network interface information:"
+        echo "Network Interface:"
         ip addr
 
-        echo "Routing table"
+        echo "Routing Table:"
         ip route
-        echo "Listening ports:"
-        sudo netstat -tuln
+        # Performs health final check 
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST:5000/api/health --connect-timeout 10)
+        CURL_EXIT_CODE=$?
+ 
+        echo "Final Health Check:"
+        echo "Curl Exit Code: $CURL_EXIT_CODE"
+        echo "HTTP Response Code: $RESPONSE"
 
         if [ $CURL_EXIT_CODE -eq 0 ] && [ $RESPONSE -eq 200 ]; then
           echo "Deployment successful, health check passed."
