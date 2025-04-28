@@ -192,7 +192,7 @@ jobs:
           else
             echo "Application failed to start"
             echo "Detailed error:"
-            ./venv.bin/python -m pytest backend_mobile.py
+            ./venv/bin/python -m pytest -v backend_mobile.py
             exit 1
           fi
 
