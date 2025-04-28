@@ -158,43 +158,63 @@ jobs:
           pip list
 
           # Running application directly in the background 
-          cd ~/ecodetect
-          nohup ./venv/bin/python backend_mobile.py > flask.log 2>&1 &
+         cd ~/ecodetect
 
-          # Storing PID
-          echo $! > ~/ecodetect/app.pid
+         echo "Files in deployment directory"
+         ls -la
 
-          # Wait for application to start
-          sleep 10
+         echo "Python interpreter details:"
+         ./venv/bin/python --version
+         ./venv/bin/python -m site
 
-          # Chck application status
-          echo "Checkin application status"
-          if [ -f flask.log ]; then
+         echo "Checking requirements.txt"
+         cat requirements.txt
+
+         echo "Attempting to run with full tracing:"
+         ./venv/bin/python -m trace --trace backend_mobile.py > full_trace.log 2>&1 &
+
+         nohup ./venv/bin/python backend_mobile.py > flask.log 2>&1 &
+
+         # Storing PID
+         echo $! > ~/ecodetect/app.pid
+         
+         # Wait for application to start
+         sleep 10 
+
+         # Check application status
+         echo "Checking application status"
+         if [ -f flask.log ]; then
             echo "--- Log File contents ---"
             cat flask.log
-          else
+         else
             echo "Log file does not exist"
-          fi
+         fi
 
-          echo "Checking Python version and path"
-          ./venv/bin/python --version
-          which ./venv/bin/python
+         echo "Checking Python version and path"
+         ./venv/bin/python --version
+         which ./venv/bin/python
 
-          echo "Checking if backend_mobile.py exists"
-          ls -l backend_mobile.py
-
-          echo "Checking virtual envrionment activation..."
-          echo $VIRTUAL_ENV
-
-          # Check if the application is running
-          if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
+         echo "Checkin if backend_mobile.py exists"
+         ls -l backend_mobile.py
+         # Check if application is running
+         if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
             echo "Application started successfully"
-          else
+         else
             echo "Application failed to start"
             echo "Detailed error:"
             ./venv/bin/python -m pytest -v backend_mobile.py
+
+            echo "Python Paath:"
+            which python
+            echo "Virtual environement details:"
+            ./venv/bin/python -m site
+
+            echo "Checking full trace log:"
+            cat full_trace.log
+
             exit 1
-          fi
+         fi
+
 
           # Cleans up deployment zip
           rm ~/ecodetect_backend.zip
