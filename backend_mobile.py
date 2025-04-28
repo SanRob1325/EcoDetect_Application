@@ -31,21 +31,21 @@ try:
     from sense_hat import SenseHat
     SENSE_HAT_AVAILABILITY = True
 except ImportError:
-    SENSE_HAT_AVAILABILITY = False
     logging.warning("Sense HAT hardare is not detected. Using mock implementation")
 
 class FlexibleSenseHat:
     def __init__(self):
         self._real_sensor = None
-        if SENSE_HAT_AVAILABILITY:
+        self.SENSE_HAT_AVAILABILITY = None
+        if self.SENSE_HAT_AVAILABILITY:
             try:
                 self._real_sensor = SenseHat()
             except Exception as e:
                 logging.error(f"Error initialising SENSE HAT: {e}")
-                SENSE_HAT_AVAILABILITY = False
+                self.SENSE_HAT_AVAILABILITY = False
 
     def _get_method(self, method_name):
-        if SENSE_HAT_AVAILABILITY and self._real_sensor:
+        if self.SENSE_HAT_AVAILABILITY and self._real_sensor:
             return getattr(self._real_sensor, method_name)
 
         # Mock implmentations
