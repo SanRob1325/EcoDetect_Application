@@ -126,9 +126,10 @@ jobs:
 
           # Show available disk 
           df -h
+
           # Installing required packages
           sudo apt-get update
-          sudo apt-get install -y unzip python3-venv python3-dev libatlas-base-dev 
+          sudo apt-get install -y unzip python3-venv python3-pip python3-dev libatlas-base-dev 
 
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
@@ -152,6 +153,10 @@ jobs:
           pip install RTIMULib
           pip install -r ~/ecodetect/requirements.txt
 
+          pip install pytest flask boto3 pymongo
+
+          pip list
+
           # Running application directly in the background 
           cd ~/ecodetect
           nohup python backend_mobile.py > flask.log 2>&1 &
@@ -160,11 +165,12 @@ jobs:
           echo $! > ~/ecodetect/app.pid
 
           # Wait for application to start
-          sleep 5
+          sleep 10
 
           # Check if the application is running
           if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
             echo "Application started successfully"
+            cat flask.log
           else
             echo "Application failed to start"
             cat flask.log
