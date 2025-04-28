@@ -40,7 +40,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python3-dev libatlas-base-dev
         #pip install RTIMULib --no-cache-dir -v #skipped for now
-
         pip install -r requirements.txt
         pip install pytest pytest-cov
     - name: Create dummy cert files for MQTT
@@ -65,7 +64,6 @@ jobs:
       run: |
         cd ./sensor-frontend
         npm test -- --coverage
-
     # Upload coverage
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
@@ -87,12 +85,10 @@ jobs:
         
           # Copy requirements file
           cp requirements.txt deploy/
-
           echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
-
           cd deploy 
           zip -r ../backend_deployment.zip .
-
+          
     - name: Deploy to EC2
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -104,121 +100,58 @@ jobs:
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
-
         # Copy deployment package 
         scp -i ~/.ssh/deploy_key backend_deployment.zip $EC2_USER@$EC2_HOST:~/ecodetect_backend.zip
-
         # Deploying to remote server
         ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST '
-
           # Clear package cache to free up space
           sudo apt-get clean
           sudo apt-get autoremove -y
-
           # Cleans up old Python cache files
           find ~/ -name "__pycache__" -type d -exec rm -rf {} \; 2>/dev/null || true
           find ~/ -name "*.pyc" -delete 2>/dev/null || true
-
           # Clean old backups if any directory exists
           if [ -d ~/ecodetect_backups ]; then
             rm -rf ~/ecodetect_backups/*
           fi
-
           # Show available disk 
           df -h
-
           # Installing required packages
           sudo apt-get update
-          sudo apt-get install -y unzip python3-venv python3-pip python3-dev libatlas-base-dev 
-
+          sudo apt-get install -y unzip python3-venv python3-dev libatlas-base-dev 
           # Creates a backup
           TIMESTAMP=$(date +"%Y%m_%H%M%S")
           mkdir -p ~/ecodetect_backups
-
           if [ -d ~/ecodetect ]; then
             cp -r ~/ecodetect ~/ecodetect_backups/backup_$TIMESTAMP
           fi
-
           # Removes existing deployment
           rm -rf ~/ecodetect
           mkdir -p ~/ecodetect
-
           unzip ~/ecodetect_backend.zip -d ~/ecodetect
-
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
-
           # Installing dependencies
           pip install --upgrade pip
-          # pip install RTIMULib
+          pip install RTIMULib
           pip install -r ~/ecodetect/requirements.txt
-
-          pip install pytest flask boto3 pymongo
-
-          pip list
-
           # Running application directly in the background 
-         cd ~/ecodetect
-
-         echo "Files in deployment directory"
-         ls -la
-
-         echo "Python interpreter details:"
-         ./venv/bin/python --version
-         ./venv/bin/python -m site
-
-         echo "Checking requirements.txt"
-         cat requirements.txt
-
-         echo "Attempting to run with full tracing:"
-         ./venv/bin/python -m trace --trace backend_mobile.py > full_trace.log 2>&1 &
-
-         nohup ./venv/bin/python backend_mobile.py > flask.log 2>&1 &
-
-         # Storing PID
-         echo $! > ~/ecodetect/app.pid
-         
-         # Wait for application to start
-         sleep 10 
-
-         # Check application status
-         echo "Checking application status"
-         if [ -f flask.log ]; then
-            echo "--- Log File contents ---"
-            cat flask.log
-         else
-            echo "Log file does not exist"
-         fi
-
-         echo "Checking Python version and path"
-         ./venv/bin/python --version
-         which ./venv/bin/python
-
-         echo "Checkin if backend_mobile.py exists"
-         ls -l backend_mobile.py
-         # Check if application is running
-         if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
+          cd ~/ecodetect
+          nohup python backend_mobile.py > flask.log 2>&1 &
+          # Storing PID
+          echo $! > ~/ecodetect/app.pid
+          # Wait for application to start
+          sleep 5
+          # Check if the application is running
+          if ps -p $(cat ~/ecodetect/app.pid) > /dev/null; then
             echo "Application started successfully"
-         else
+          else
             echo "Application failed to start"
-            echo "Detailed error:"
-            ./venv/bin/python -m pytest -v backend_mobile.py
-
-            echo "Python Paath:"
-            which python
-            echo "Virtual environement details:"
-            ./venv/bin/python -m site
-
-            echo "Checking full trace log:"
-            cat full_trace.log
-
+            cat flask.log
             exit 1
-         fi
-
-
+          fi
           # Cleans up deployment zip
           rm ~/ecodetect_backend.zip
-
           # Removes the old backups and keeps the last 5 for logging future errors
           cd ~/ecodetect_backups
           ls -t | tail -n +6 | xargs rm -rf     
@@ -234,10 +167,8 @@ jobs:
       run: |
         # Waits for the deployment
         sleep 30
-
         # Performs health check 
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST:5000/api/health --connect-timeout 10)
-
         if [ $RESPONSE -eq 200 ]; then
           echo "Deployment successful, health check passed."
           exit 0
@@ -245,10 +176,3 @@ jobs:
           echo "Health check failed. Response code: $RESPONSE "
           exit 1
         fi
-
-
-
-          
-      
-        
-    
