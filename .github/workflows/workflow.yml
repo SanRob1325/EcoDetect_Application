@@ -210,8 +210,12 @@ jobs:
           unzip ~/ecodetect_backend.zip -d ~/ecodetect
 
                     
-          sed -i 's|MONGO_URI=.*|MONGO_URI=mongodb://localhost:27017/|' ~/ecodetect/.env
-
+          if [ -f ~/ecodetect/.env ]; then
+            sed -i 's|MONGO_URI=.*|MONGO_URI=mongodb://localhost:27017/|' ~/ecodetect/.env
+          else
+            echo ".env file not found"
+          fi
+          
           python3 -m venv ~/ecodetect/venv
           source ~/ecodetect/venv/bin/activate
 
