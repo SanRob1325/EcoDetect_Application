@@ -159,7 +159,7 @@ jobs:
 
           # Running application directly in the background 
           cd ~/ecodetect
-          nohup python backend_mobile.py > flask.log 2>&1 &
+          nohup ./venv/bin/python backend_mobile.py > flask.log 2>&1 &
 
           # Storing PID
           echo $! > ~/ecodetect/app.pid
