@@ -88,7 +88,7 @@ jobs:
           echo "EcoDetect Backend Deployment" > deploy/DEPLOY_README.md
           cd deploy 
           zip -r ../backend_deployment.zip .
-
+          
     - name: Deploy to EC2
       env:
         SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -156,4 +156,23 @@ jobs:
           cd ~/ecodetect_backups
           ls -t | tail -n +6 | xargs rm -rf     
         '
-  
+  validate-deployment:
+    name: Validate Deployment
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Health Check
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST}}
+      run: |
+        # Waits for the deployment
+        sleep 30
+        # Performs health check 
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST:5000/api/health --connect-timeout 10)
+        if [ $RESPONSE -eq 200 ]; then
+          echo "Deployment successful, health check passed."
+          exit 0
+        else 
+          echo "Health check failed. Response code: $RESPONSE "
+          exit 1
+        fi
