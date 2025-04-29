@@ -1,4 +1,5 @@
 # EcoDetect IoT AI Device
+![High-Resolution-Color-Logo-on-Transparent-Background](https://github.com/user-attachments/assets/38f79b65-b14a-461e-b2e5-3747feab737d)
 
 IoT AI generative Device developed using **Flask**,**MongoDB** via **Python** with real time communication between multiple Raspberry Pi devices
 
