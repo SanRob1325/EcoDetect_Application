@@ -86,7 +86,7 @@ class FlexibleSenseHat:
 
         return mock_methods.get(method_name, lambda *args, **kwargs: None)
     
-    def _getattr_(self, name):
+    def __getattr__(self, name):
         method = self._get_method(name)
         return method
 
