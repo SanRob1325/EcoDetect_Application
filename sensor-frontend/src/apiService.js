@@ -119,7 +119,15 @@ const apiService = {
     previewReport: (payload) => api.post('/api/reports/preview', payload),
     getRooms: () => api.get('/api/rooms'),
     getRoomSensorData: (room) => api.get(`/api/sensor-data/${room}`),
-    getHistoricalData: (dataType, days) => api.get(`/api/historical-data?data_type=${dataType}&days=${days}`)
+    getHistoricalData: (dataType, days) => api.get(`/api/historical-data?data_type=${dataType}&days=${days}`),
+
+    // Anomaly Detection
+    detectAnomalies: (sensorData) => api.post('/api/anomaly-detection', sensorData),
+    getRecentAnomalies: (roomId) => api.get(`/api/recent-anomalies${roomId ? `?room_id=${roomId}` : ''}`),
+
+    // Energy Optimisation
+    getEnergyRecommendations: (roomId) => api.get(`/api/energy-optimiser/${roomId}/recommendations`),
+    getEnergySavingsSummary: () => api.get('/api/energy-optimiser/savings-summary')
 };
 
 export default apiService;

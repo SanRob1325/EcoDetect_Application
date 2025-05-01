@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Tabs, Spin, Empty, Badge, Typography, Switch, Select, Button, message, Modal, Avatar, Input } from 'antd';
 import { HomeOutlined, EnvironmentOutlined, ClockCircleOutlined, DropboxOutlined, PoweroffOutlined, RobotOutlined, QuestionCircleOutlined, SendOutlined } from '@ant-design/icons'
 import GaugeChart from 'react-gauge-chart';
+import AnomalyDetection from './AnomalyDetection';
+import EnergyOptimiser from './EnergyOptimiser';
 import apiService from './apiService';
 
 const { Text, Title } = Typography;
@@ -19,24 +21,40 @@ const RoomMonitor = () => {
     const [aiLoading, setAiLoading] = useState(false);
     const [selectedRoomsForAI, setSelectedRoomsForAI] = useState([]);
 
+    // Chatbot from Dashboard
+    const [chatbotVisible, setChatbotVisible] = useState(false);
+    const [chatHistory, setChatHistory] = useState([
+        { sender: 'bot', message: 'Hello I can help you monitor you rooms and provide eco-friendly tips.' },
+    ]);
+    const [chatInput, setChatInput] = useState('');
+
     // Fetch list of rooms
     useEffect(() => {
         const fetchRooms = async () => {
             try {
                 const response = await apiService.getRooms();
-                setRooms(response.data);
-                setActiveRoom(response.data[0] || null);
-                // Initialise data structure for each room
-                const initialData = {};
-                const initialEnabledState = {};
-                response.data.forEach(room => {
-                    initialData[room] = null;
-                    initialEnabledState[room] = true;
-                });
-                setRoomData(initialData);
-                setEnabledRooms(initialEnabledState);
+                if (response.data && Array.isArray(response.data)) {
+                    setRooms(response.data);
+                    if (response.data.length > 0) {
+                        setActiveRoom(response.data[0])
+                    }
+
+                    // Initialise data structure for each room
+                    const initialData = {};
+                    const initialEnabledState = {};
+                    response.data.forEach(room => {
+                        initialData[room] = null;
+                        initialEnabledState[room] = true;
+                    });
+                    setRoomData(initialData);
+                    setEnabledRooms(initialEnabledState);
+                } else {
+                    console.error('Invalid rooms data format:', response.data);
+                    message.error('Error loading rooms data');
+                }
             } catch (error) {
                 console.error('Error fetching rooms:', error);
+                message.error('Failed to fetch rooms');
             }
         };
 
@@ -45,42 +63,83 @@ const RoomMonitor = () => {
     }, []);
 
     // Fetch data for each room
-    useEffect(() => {
+    const fetchAllRoomData = useCallback(async () => {
         if (rooms.length === 0) return;
 
-        const fetchAllRoomData = async () => {
-            setLoading(true);
+        setLoading(true);
+        const updatedData = { ...roomData };
 
-            const updatedData = { ...roomData };
-
-            for (const room of rooms) {
-
-                // Skips disabled rooms
-                if (!enabledRooms[room]) {
-                    updatedData[room] = { ...updatedData[room], disabled: true };
-                    continue;
-                }
-                try {
-                    const response = await apiService.getRoomSensorData(room)
-                    updatedData[room] = response.data;
-                } catch (error) {
-                    console.error(`Error fetching data for room ${room}:`, error);
-                    // Keeps existing data if the fetch fails
-                    if (roomData && roomData[room]) {
-                        updatedData[room] = roomData[room];
-                    }
-                }
+        for (const room of rooms) {
+            // Skips disabled rooms
+            if (!enabledRooms[room]) {
+                updatedData[room] = { ...updatedData[room], disabled: true };
+                continue;
             }
 
-            setRoomData(updatedData);
-            setLoading(false);
-        };
-        fetchAllRoomData();
+            try {
+                const response = await apiService.getRoomSensorData(room)
+                updatedData[room] = response.data;
 
+                // Formats timestamp to the local tim if present
+                if (updatedData[room]?.timestamp) {
+                    try {
+                        const timestampStr = updatedData[room].timestamp;
+                        let timestamp;
+
+                        if (typeof timestampStr === 'string') {
+                        
+                            // Create a local time date object
+                            timestamp = new Date(timestampStr);
+                            
+
+                            // Force to display UTC time instead
+                            updatedData[room].formattedTime = timestamp.toUTCString();
+
+                            // for displaying the standard format
+                            const options = {
+                                year: 'numeric',
+                                month: 'numeric',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                timeZone: 'UTC' // Forcing UTC
+                            };
+                            updatedData[room].formattedTime = timestamp.toLocaleString('en-US', options) + ' GMT';
+                        } else {
+                            // If it's already a date object or number
+                            timestamp = new Date(timestampStr);
+                            // Store the formatted time to display
+                            updatedData[room].formattedTime = timestamp.toUTCString();
+                        }           
+                        console.log('Original timestamp:', timestampStr);
+                        console.log('Formatted timestamp:', updatedData[room].formattedTime);
+                    } catch (error) {
+                        console.error('Error formatting timestamp', error);
+                        // Fallback to original timestamp string
+                        updatedData[room].formattedTime = String(updatedData[room].timestamp);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error fetching data for room ${room}`, error);
+                // Keeps existing data it fetch fails
+                if (roomData && roomData[room]) {
+                    updatedData[room] = roomData[room];
+                }
+            }
+        }
+
+        setRoomData(updatedData);
+        setLoading(false);
+    }, [rooms, enabledRooms, roomData]);
+
+
+    useEffect(() => {
+        fetchAllRoomData();
         // Set up polling
         const interval = setInterval(fetchAllRoomData, 10000);
         return () => clearInterval(interval);
-    }, [rooms, enabledRooms, roomData]);
+    }, [fetchAllRoomData]);
 
     const handleTabChange = (activeKey) => {
         setActiveRoom(activeKey);
@@ -103,13 +162,6 @@ const RoomMonitor = () => {
 
         message.success(`Room ${room} ${newEnabledRooms[room] ? 'enabled' : 'disabled'}`)
     };
-
-    // Chatbot from Dashboard
-    const [chatbotVisible, setChatbotVisible] = useState(false);
-    const [chatHistory, setChatHistory] = useState([
-        { sender: 'bot', message: 'Hello I can help you monitor you rooms and provide eco-friendly tips.' },
-    ]);
-    const [chatInput, setChatInput] = useState('');
 
     const openAIAssistant = () => {
         // Set the active room as the default selected room for AI
@@ -178,7 +230,6 @@ const RoomMonitor = () => {
     };
 
     const handleChatSend = async () => {
-
         if (!chatInput.trim()) return;
 
         // Add user message to the chat
@@ -186,7 +237,7 @@ const RoomMonitor = () => {
             ...prev,
             { sender: 'user', message: chatInput.trim() },
             { sender: 'bot', message: 'Thinking...' }
-        ])
+        ]);
 
         try {
             // Prepare data for selected rooms
@@ -303,6 +354,7 @@ const RoomMonitor = () => {
             >
                 <Tabs
                     defaultActiveKey={rooms[0] || "1"}
+                    activeKey={activeRoom}
                     onChange={handleTabChange}
                     type="card"
                     tabBarStyle={{
@@ -347,7 +399,7 @@ const RoomMonitor = () => {
 
                             {!enabledRooms[room] ? (
                                 <Empty
-                                    description={`Room ${room} is currenlty disabled`}
+                                    description={`Room ${room} is currently disabled`}
                                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                                 />
                             ) : roomData[room] ? (
@@ -375,7 +427,7 @@ const RoomMonitor = () => {
                                         <GaugeChart
                                             id={`temp-gauge-${room}`}
                                             nrOfLevels={20}
-                                            percent={(roomData[room].temperature || 0) / 40}
+                                            percent={Math.min(1, (roomData[room].temperature || 0) / 40)}
                                             needleColor='#4CAF50'
                                             needleBaseColor="#4CAF50"
                                             colors={['#C8E6C9', '#81C784', '#4CAF50']}
@@ -592,8 +644,9 @@ const RoomMonitor = () => {
                                             </div>
                                             <div style={{ margin: '8px 0' }}>
                                                 <ClockCircleOutlined style={{ marginRight: '8px', color: '#388E2C' }} />
-                                                <Text>Last Updated: {roomData[room]?.timestamp ?
-                                                    new Date(roomData[room].timestamp).toLocaleString() : "N/A"}</Text>
+                                                <Text>Last Updated: {roomData[room]?.formattedTime ||
+                                                    (roomData[room]?.timestamp ?
+                                                        new Date(roomData[room].timestamp).toLocaleString() : "N/A")}</Text>
                                             </div>
                                             {roomData[room]?.flow_rate > 0 && (
                                                 <div style={{ margin: '8px 0' }}>
@@ -622,6 +675,18 @@ const RoomMonitor = () => {
                         </Tabs.TabPane>
                     ))}
                 </Tabs>
+
+                {activeRoom && enabledRooms[activeRoom] && roomData[activeRoom] && (
+                    <div style={{ marginTop: '20px' }}>
+                        <AnomalyDetection
+                            sensorData={roomData[activeRoom]}
+                            roomId={activeRoom}
+                        />
+                        <EnergyOptimiser
+                            roomId={activeRoom}
+                        />
+                    </div>
+                )}
             </Card>
             {/*AI assistant Modal*/}
             <Modal

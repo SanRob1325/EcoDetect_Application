@@ -17,6 +17,7 @@ import numpy as np
 import random
 import json
 import math
+from bson import ObjectId
 import requests
 from jose import jwt, jwk
 from jose.utils import base64url_decode
@@ -26,12 +27,15 @@ from statsmodels.tsa.arima.model import ARIMA
 import time
 import uuid
 import sys
+from device_ml import DeviceMLModel
+from energy_optimiser import EnergyOptimiser
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8081,http://localhost:19000").split(",")
 CORS(app, resources={r"/api/*": {"origins": allowed_origins, "supports_credentials": True}}, expose_headers=["Authorization"])
+
 app.register_blueprint(report_routes)
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
 sns_client = boto3.client("sns", region_name="eu-west-1")
@@ -230,7 +234,14 @@ def auth_middleware():
     # Add additional debug logging
     logging.debug(f"Validating token for path: {request.path}")
     
-    valid, claims = verify_token(token) if isinstance(verify_token(token), tuple) else (True, verify_token(token))
+    verification_result = verify_token(token)
+
+    if isinstance(verification_result, tuple):
+        valid, claims = verification_result
+    
+    else:
+        valid = verification_result
+        claims = {}
 
     if not valid:
         logging.warning(f"Invalid token for {request.path}")
@@ -317,6 +328,7 @@ def auth_test():
     except Exception as e:
         logging.error(f"Auth test error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
 # create alert service
 alert_service= AlertService(
     sns_client=sns_client,
@@ -324,6 +336,12 @@ alert_service= AlertService(
     dynamodb=dynamodb,
     mongo_db=db
 )
+
+# Initialise device machine learning model
+device_ml_model = DeviceMLModel()
+
+# Initialise optimiser
+energy_optimiser = EnergyOptimiser()
 
 def validate_environment():
     """Validate critical environment variables"""
@@ -341,7 +359,7 @@ def validate_environment():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Simple check for checking enpoint API's are working"""
+    """Simple check for checking endpoint API's are working"""
     return jsonify({"status": "healthy"}), 200
 
 def calculate_carbon_footprint(data):
@@ -411,9 +429,15 @@ def normalize_sensor_data(data):
             temperature = float(temperature)
             cpu_temperature = get_cpu_temperature()
             if cpu_temperature is not None:
-                normalized_data['temperature'] = round(temperature  - ((cpu_temperature - temperature) / 5.466), 2)
+                cpu_difference = cpu_temperature - temperature
+                adjustment = max(min(cpu_difference / 5.466, 20))
+                normalized_data['temperature'] = round(temperature - adjustment, 2)
+
+                if normalized_data['temperature'] > 50 or normalized_data['temperature'] < -10:
+                    logging.warning(f"Calibrated temperature {normalized_data['temperature']}°C is outside reasonable range. Uncalibrated value.")
             else:
                 normalized_data['temperature'] = round(temperature,2)
+
         except (ValueError, TypeError):
             logging.warning(f"Invalid temperature value: {temperature}")
             normalized_data['temperature'] = temperature
@@ -2704,7 +2728,145 @@ def calculate_vehicle_impact(movement_data):
     # Rationalises the impact on the environment at 50%
     return min(impact, 50)
 
+class JSONEncoder(json.JSONEncoder):
+    """A custom JSON encoder that can handle MongoDB ObjectId"""
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj) # Converts the objectId to string
+        return json.JSONEncoder.default(self, obj)
     
+@app.route('/api/anomaly-detection', methods=['POST'])
+def detect_anomalies():
+    """On Device anomaly detection"""
+    try:
+        # Get data from request thats been created
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Run anomaly detection
+        result = device_ml_model.detect_anomalies(data)
+
+        # Stores the resuly if it happens to be an anomaly
+        if result.get("is_anomaly", False):
+            # Add to the anomaly collection
+            result_for_db = result.copy()
+            result_for_db["device_id"] = data.get("device_id", "unknown")
+            result_for_db["room_id"] = data.get("room_id", "unknown")
+            
+            try: 
+                # Insert into MongoDB 
+                inserted_id = db.anomalies.insert_one(result_for_db).inserted_id
+                logging.info(f"Stored anomaly in MongoDB with ID: {inserted_id}")
+
+                # Remoce the MonogoDB _id from response
+                if "_id" in result:
+                    del result["_id"]
+            except Exception as db_error:
+                logging.error(f"Failed to store anomaly in MongoDB: {str(db_error)}")
+
+            # Trigger alert if it's a sever anomaly
+            if result.get("anomaly_score", 0) > 0.85:
+                alert_data = {
+                    "temperature": data.get("temperature"),
+                    "humidity": data.get("humidity"),
+                    "pressure": data.get("pressure"),
+                    "device_id": data.get("device_id", "unknown"),
+                    "location": data.get("location", "Unknown"),
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                # Directly triggers the alert
+                thresholds = get_default_thresholds()
+                alert_service._trigger_alerts(alert_data, ["ml_anomaly_detected"], thresholds)
+
+                # Also stores in alert history
+                alert_service._store_alert_history_dynamodb(alert_data, ["ml_anomaly_detected"], thresholds)
+
+                logging.info(f"Machine Learning anomaly alert triggered for  {data.get('room_id', 'unknown')} with score {result.get('anomaly_score')}")
+        return app.response_class(
+            response=json.dumps(result, cls=JSONEncoder),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        logging.error(f"Error in anomaly detection endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/recent-anomalies', methods=['GET'])
+def get_recent_anomalies():
+    """Gets the recent detected anomalies"""
+    try:
+        # Get query parameters
+        limit = int(request.args.get('limit', 10))
+        room_id = request.args.get('room_id')
+
+        # Build query
+        query = {}
+        if room_id:
+            query["room_id"] = room_id
+
+        anomalies = list(db.anomalies.find(query, {"_id": 0}).sort("timestamp", -1).limit(limit))
+
+        return jsonify({
+            "anomalies": anomalies,
+            "count": len(anomalies)
+        })
+    except Exception as e:
+        logging.error(f"Error getting recent anomalies: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/energy-optimiser/<room_id>/recommendations', methods=['GET'])
+def get_energy_recommendations(room_id):
+    """Get enery optimisation recommendations for a room"""
+    try:
+        # Get current sensor data
+        sensor_data = sensor_data_collection.find_one(
+            {"room_id": room_id},
+            sort=[("timestamp", -1)]
+        )
+
+        if not sensor_data:
+            return jsonify({
+                "error": "No sensor data found for this room"
+            }), 404
+        
+        timestamp = sensor_data.get("timestamp")
+        logging.info(f"Timestamp type: {type(timestamp)}, value: {str(timestamp)}")
+        temperature = sensor_data.get("temperature", 22) 
+        humidity = sensor_data.get("humidity", 45)  
+
+        try:
+            # Convert temperature and humidity
+            temperature = float(temperature)
+            humidity = float(humidity)
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Invalid sensor data: {str(e)}")
+            temperature = 22.0
+            humidity = 45.0
+
+        recommendations = energy_optimiser.get_recommendations(
+            room_id,
+            temperature,
+            humidity,
+            None
+        )
+
+        return jsonify(recommendations)
+    except Exception as e:
+        logging.error(f"Error getting energy recommendations: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/energy-optimiser/savings-summary', methods=['GET'])
+def get_energy_savings_summary():
+    """Get summary of energy savings"""
+    try:
+        summary = energy_optimiser.get_savings_summary()
+        return jsonify(summary)
+    except Exception as e:
+        logging.error(f"Error getting energy savings summary: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     validate_environment()
     app.run(host='0.0.0.0',port=5000)

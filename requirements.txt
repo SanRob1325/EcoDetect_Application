@@ -22,7 +22,7 @@ pandas
 numpy
 scikit-learn
 statsmodels
-
+tensorflow
 # PDF and Reports
 matplotlib
 reportlab>=3.6.0
