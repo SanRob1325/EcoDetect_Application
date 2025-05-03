@@ -1,8 +1,8 @@
 import  React, { useState, useEffect } from 'react';
-import { Card, Button, Tag, Statistic, Descriptions, Typography, Alert, Divider, Progess, Spin, Progress} from 'antd';
+import { Card, Button, Tag, Statistic, Typography, Alert, Divider, Spin, Progress} from 'antd';
 import { ThunderboltOutlined, FireOutlined, DollarOutlined, LineChartOutlined, SyncOutlined, ArrowUpOutlined, ArrowDownOutlined, MinusOutlined} from '@ant-design/icons';
 import apiService from './apiService';
-import { Line } from 'react-chartjs-2';
+
 
 const { Title, Text, Paragraph } = Typography;
 

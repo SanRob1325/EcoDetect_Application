@@ -30,6 +30,21 @@ const ReportGenerator = () => {
     const [reportUrl, setReportUrl] = useState('');
     const [reportGenerated, setReportGenerated] = useState(false);
 
+    // Card styling
+    const cardStyle = {
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        backgroundColor: '#F1F8E9',
+        margin: '16px'
+    };
+
+    const cardHeadStyle = {
+        backgroundColor: '#388E3C',
+        color: 'white',
+        borderTopLeftRadius: '8px',
+        borderTopRightRadius: '8px'
+    };
+
     // Reset custom date rangewhen time range changes
     useEffect(() => {
         if (timeRange !== 'custom'){
@@ -116,7 +131,7 @@ const ReportGenerator = () => {
             }
         } catch (error){
             console.error('Error generating report:', error);
-            message.error('An error occurred while gnerating the report')
+            message.error('An error occurred while generating the report')
         } finally {
             setLoading(false);
         }
@@ -154,7 +169,7 @@ const ReportGenerator = () => {
     };
 
     return (
-        <Card title="Environmental Data Report Generator" style={{margin: '16px'}}>
+        <Card title="Environmental Data Report Generator" style={cardStyle} headStyle={cardHeadStyle}>
             <Form
                 form={form}
                 layout='vertical'
@@ -244,6 +259,11 @@ const ReportGenerator = () => {
                             icon={<LineChartOutlined />}
                             onClick={handlePreview}
                             loading={previewLoading}
+                            style={{
+                                backgroundColor: '#4CAF50',
+                                borderColor: '#388E3C',
+                                borderRadius: '4px'
+                            }}
                         >
                             Preview Report
                         </Button>
@@ -253,6 +273,11 @@ const ReportGenerator = () => {
                             icon={<FileTextOutlined />}
                             htmlType="submit"
                             loading={loading}
+                            style={{
+                                backgroundColor: '#4CAF50',
+                                borderColor: '#388E3C',
+                                borderRadius: '4px'
+                            }}
                         >
                             Generate Report
                         </Button>
@@ -263,6 +288,11 @@ const ReportGenerator = () => {
                                 icon={<DownloadOutlined />}
                                 href={reportUrl}
                                 target="_blank"
+                                style={{
+                                    backgroundColor: '#4CAF50',
+                                    borderColor: '#388E3C',
+                                    borderRadius: '4px'
+                                }}
                             >
                               Download Report
                             </Button>
@@ -287,6 +317,10 @@ const ReportGenerator = () => {
                                     setPreviewVisible(false);
                                     form.submit()
                                 }}
+                                style={{
+                                    backgroundColor: '#4CAF50',
+                                    borderColor: '#388E2C'
+                                }}
                             >
                                 Generate Full Report
                             </Button>
@@ -308,7 +342,7 @@ const ReportGenerator = () => {
 
                                 {dataTypes.includes('temperature') && (
                                     <div>
-                                        <Title level={5}>Temperatature Statistics</Title>
+                                        <Title level={5}>Temperature Statistics</Title>
                                         {formatPreviewStats(previewData.summary, 'temperature')}
                                     </div>
                                 )}

@@ -7,6 +7,7 @@ import { notification} from 'antd';
 import Alerts from './Alerts';
 import CarbonFootprintCard from './CarbonFootprint';
 import ReportCard from './ReportCard';
+import VehicleEmissions from './VehicleEmissions';
 import apiService from './apiService';
 
 const { Option } = Select;
@@ -495,6 +496,7 @@ const Dashboard = () => {
                 </Card>
                 <CarbonFootprintCard sensorData={data} waterFlow={waterFlow} />
                 <ReportCard style={{ margin: 0 }} />
+                <VehicleEmissions />
             </div>
 
             {/*Last Updated Status*/}

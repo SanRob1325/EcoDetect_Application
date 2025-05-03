@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import apiService from './apiService';
-import { Input, Button, Card, Typography, Spin, Select, Alert, DatePicker, Switch, Tooltip } from 'antd'
+import { Input, Button, Card, Typography, Spin, Select, Alert, DatePicker, Switch, Tooltip, Avatar, Empty } from 'antd'
 import { Line } from 'react-chartjs-2';
 import moment from 'moment';
-import { HistoryOutlined, LoadingOutlined, RobotOutlined } from '@ant-design/icons'; //And Design loading icon
-import './AIAssistant.css'; //CSS sytling
+import { HistoryOutlined, LoadingOutlined, RobotOutlined, SendOutlined, BulbOutlined, UserOutlined, SyncOutlined, QuestionCircleOutlined } from '@ant-design/icons'; //And Design loading icon
+import './AIAssistant.css'; //CSS styling
 
 import {
     Chart as ChartJS,
@@ -18,7 +18,7 @@ import {
 } from 'chart.js'
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, ChartTitle, ChartTooltip, Legend)
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { RangePicker } = DatePicker;
 
 const AIAssistant = () => {
@@ -32,10 +32,19 @@ const AIAssistant = () => {
     const [historicalData, setHistoricalData] = useState([]);
     const [showHistorical, setShowHistorical] = useState(true);
     const [userQuery, setUserQuery] = useState('');
-    const [aiResponse, setAiResponse] = useState('');
     const [loading, setLoading] = useState(false);
     const [alertMessage, setAlertMessage] = useState('');
     const [dateRange, setDateRange] = useState([moment().subtract(7, 'days')])
+
+    // Chat staate
+    const conversationEndRef = useRef(null);
+    const [conversationHistory, setConversationHistory] = useState([]);
+    const [quickSuggestions, setQuickSuggestions] = useState([
+        'What does this data mean?',
+        'Why are ther anomalies in the data?',
+        'How can I optimise my environment?',
+        'Explain temperature trends'
+    ])
 
     const fetchPredictiveData = useCallback(async () => {
         setLoading(true);
@@ -68,7 +77,7 @@ const AIAssistant = () => {
     // Fetch historical data
     const fetchHistoricalData = useCallback(async () => {
         setHistoricalLoading(true);
-        try{
+        try {
             const response = await apiService.getHistoricalData(dataType, days);
             console.log("Historical data:", response.data);
             if (response.data && response.data.historical_data) {
@@ -91,27 +100,128 @@ const AIAssistant = () => {
 
     }, [fetchPredictiveData, fetchHistoricalData]);
 
+    // Auto scroll to  bottom of conversation when new messages are added
+    useEffect(() => {
+        if (conversationEndRef.current) {
+            conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [conversationHistory]);
+    
+    useEffect(() => {
+        let newSuggestions = ['What does this data mean?'];
+
+        if (anomalies.length > 0) {
+            newSuggestions.push('Why are there anomalies in the data?');
+        }
+
+        switch (dataType) {
+            case 'temperature':
+                newSuggestions.push('How can I optimise temperature settings?');
+                newSuggestions.push('What is a normal temperature range?');
+                break;
+            case 'humidity':
+                newSuggestions.push('What is the ideal humidity level?');
+                newSuggestions.push('How does humidity affect energy usage?')
+                break;
+            case 'pressure':
+                newSuggestions.push('What do these pressure readings indicate?');
+                newSuggestions.push('Is this pressure level normal?');
+                break;
+            case 'flow_rate':
+                newSuggestions.push('How can I reduce water usage?');
+                newSuggestions.push('Is my water consumption efficient?');
+                break;
+            default:
+                break;
+        }
+        setQuickSuggestions(newSuggestions);
+    }, [dataType, anomalies.length])
+
     //Function to handle form sumission (sending the user query to the backend)
     const handleQuerySubmit = async () => {
         if (!userQuery.trim()) return; //no action taken if the query is empty
 
-        setLoading(true); //starts loading 
-        setAiResponse(''); // Clear previous response
+        // user message in the conversation
+        const userMessage = {
+            type: 'user',
+            content: userQuery,
+            timestamp: new Date()
+        };
+        setConversationHistory(prev => [...prev, userMessage]);
+
+        // Clears user input field
+        setUserQuery('');
+
+        // Loading message
+        const loadingMessage = {
+            type: 'assistant',
+            content: 'Thinking...',
+            isLoading: true,
+            timestamp: new Date()
+        };
+        setConversationHistory(prev => [...prev, loadingMessage]);
+
         try {
+            // Get latest data before querying AI
             await fetchPredictiveData();
-            const response = await apiService.queryAIAssistant({
-                query: userQuery,
+
+            // Include context about current data
+            const contextData = {
+                query: userMessage.content,
                 user_id: "frontend-user",
-                location: "Web Dashboard"
-            })
-            setAiResponse(response.data.answer); //Sets AI response
+                location: "Web Dashboard",
+                context: {
+                    data_type: dataType,
+                    time_range: days,
+                    has_anomalies: anomalies.length > 0,
+                    anomalies: anomalies.slice(0, 3),
+                    recent_data_points: historicalData.slice(-5),
+                    predictions: predictions.slice(0, 5)
+                }
+            };
+
+            const response = await apiService.queryAIAssistant(contextData);
+
+            // Adds AI response by removing loading message
+            const aiMessage = {
+                type: 'assistant',
+                content: response.data.answer || "Sorry, I couldn't process you request.Please try again",
+                timestamp: new Date()
+            };
+
+            setConversationHistory(prev =>
+                prev.map((msg, i) =>
+                    i === prev.length - 1 && msg.isLoading ? aiMessage : msg
+                )
+            );
         } catch (error) {
             console.error("Error fetching AI response", error);
-            setAiResponse("Sorry, errors producing the current request")
-        } finally {
-            setLoading(false); //ends loading
+
+            // loads error message
+            const errorMessage = {
+                type: 'assistant',
+                content: "Sorry, I encountered an error processing your request. Please try again.",
+                isError: true,
+                timestamp: new Date()
+            };
+
+            setConversationHistory(prev =>
+                prev.map((msg, i) =>
+                    i === prev.length - 1 && msg.isLoading ? errorMessage : msg
+
+                )
+            )
         }
-    };
+    }
+
+    // Handle suggestion click
+    const handleSuggestionClick = (suggestion) => {
+        setUserQuery(suggestion);
+        // Auto submit suggestion
+        setTimeout(() => {
+            handleQuerySubmit();
+        }, 100);
+    }
 
     // Handle refresh button click
     const handleRefresh = () => {
@@ -119,8 +229,32 @@ const AIAssistant = () => {
         fetchHistoricalData();
     };
 
+    // Handle Enter key submission
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleQuerySubmit();
+        }
+    };
+
+    // Formats message timestamp
+    const formatMessageTime = (timestamp) => {
+        return moment(timestamp).format('h:mm A')
+    };
+
+    // A helper function to get Y-acis lable based in data type
+    function getYAxisLabel(dataType) {
+        switch (dataType) {
+            case 'temperature': return 'Temperature (°C)';
+            case 'humidity': return 'Humidity (%)';
+            case 'pressure': return 'Pressure (hPa)';
+            case 'flow_rate': return 'Flow Rate (L/min)';
+            default: return dataType;
+        }
+    }
+
     const chartData = {
-        labels:[ 
+        labels: [
             // Historical dates
             ...(showHistorical ? historicalData.map(h => moment(h.timestamp).format('MMM D')) : []),
 
@@ -171,13 +305,13 @@ const AIAssistant = () => {
             title: {
                 display: true,
                 text: `${dataType.charAt(0).toUpperCase() + dataType.slice(1)} Trends and Predictions`,
-                font: { size: 16}
+                font: { size: 16 }
             }
         },
         scales: {
             x: {
                 ticks: { autoSkip: true, maxRotation: 45, minRotation: 45 },
-                title: { display: true, text: 'Date'}
+                title: { display: true, text: 'Date' }
             },
             y: {
                 beginAtZero: false,
@@ -193,25 +327,13 @@ const AIAssistant = () => {
         }
     };
 
-    // Helper function to get Y-axis lable based on data type
-    function getYAxisLabel(dataType) {
-        switch(dataType) {
-            case 'temperature': return 'Temperature (°C)';
-            case 'humidity' : return 'Humidity (%)';
-            case 'pressure' : return 'Pressure (hPa)';
-            case 'flow_rate' : return 'Flow Rate (L/min)';
-            default: return dataType;
-        }
-    }
-        
-
     //Styling for AI processing the user query
     return (
         <div className="predictive-analysis-page">
             <Card title={
                 <div style={{ color: 'white', display: 'flex', alignItems: 'center' }}>
                     <span style={{ marginRight: '10px' }}> Predictive Analysis & Historical Anomaly Detection</span>
-                    {(loading || historicalLoading ) && <Spin size="small" style={{ marginLeft: 8 }} />}
+                    {(loading || historicalLoading) && <Spin size="small" style={{ marginLeft: 8 }} />}
                 </div>
             }
                 className='analysis-card'
@@ -243,8 +365,8 @@ const AIAssistant = () => {
                     </Select>
                     <RangePicker value={dateRange} onChange={setDateRange} style={{ marginLeft: 10 }} />
                     <Tooltip title="Show/Hide Historical Data">
-                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 10}}>
-                            <HistoryOutlined style={{ marginRight: 5}}/>
+                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 10 }}>
+                            <HistoryOutlined style={{ marginRight: 5 }} />
                             <Switch
                                 checked={showHistorical}
                                 onChange={setShowHistorical}
@@ -269,7 +391,7 @@ const AIAssistant = () => {
                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20, minHeight: '300px', alignItems: 'center' }}>
                         <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
                     </div>
-                ) : (predictions.length > 0 || historicalData.length > 0)? (
+                ) : (predictions.length > 0 || historicalData.length > 0) ? (
                     <div style={{
                         backgroundColor: '#fff',
                         padding: '15px',
@@ -297,8 +419,8 @@ const AIAssistant = () => {
                 )}
 
                 {historicalData.length > 0 && (
-                    <div style={{ marginTop: '10px', fontSize: '14px', color: '#555'}}>
-                        <span style={{ fontWeight: 'bold'}}>Data Summary:</span> Showing
+                    <div style={{ marginTop: '10px', fontSize: '14px', color: '#555' }}>
+                        <span style={{ fontWeight: 'bold' }}>Data Summary:</span> Showing
                         {showHistorical ? ` ${historicalData.length} historical data points and` : ' '}
                         {predictions.length} predicted values for {dataType}.
                     </div>
@@ -326,26 +448,191 @@ const AIAssistant = () => {
                 }}
 
             >
-                <Input.TextArea
-                    value={userQuery}
-                    onChange={(e) => setUserQuery(e.target.value)}
-                    placeholder='Ask the AI about your environmental trends...'
-                    rows={3}
+                {/*Conversation History*/}
+                <div
+                    className="conversation-container"
                     style={{
-                        borderColor: '#AED581',
-                        borderRadius: '4px',
-                        marginBottom: '10px'
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        marginBottom: '16px',
+                        padding: '10px',
+                        backgroundColor: 'white',
+                        borderRadius: '8px',
+                        border: '1px solid #e8e8e8'
                     }}
-                />
-                <Button type="primary" onClick={handleQuerySubmit} style={{ marginTop: 10, backgroundColor: '#4CAF50', borderColor: '#388E3C', borderRadius: '4px' }} disabled={loading}>Submit</Button>
-                {aiResponse && (
-                    <div style={{ marginTop: 20, backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'}}>
-                        <Title level={4} style={{ color: '#388E3C'}}>AI Response:</Title>
-                        <Paragraph style={{ color: '#333'}}>{aiResponse}</Paragraph>
+                >
+                    {conversationHistory.length > 0 ? (
+                        conversationHistory.map((message, index) => (
+                            <div
+                                key={index}
+                                className={`message ${message.type}`}
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: message.type === 'user' ? 'flex-end' : 'flex-start',
+                                    marginBottom: '12px',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        marginBottom: '4px'
+                                    }}
+                                >
+                                    {message.type === 'assistant' && (
+                                        <Avatar
+                                            icon={<RobotOutlined />}
+                                            style={{
+                                                backgroundColor: '#388E3C',
+                                                marginRight: '8px'
+                                            }}
+                                            size="small"
+                                        />
+                                    )}
+                                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                                        {message.type === 'user' ? 'You' : 'AI Assistant'} • {formatMessageTime(message.timestamp)}
+                                    </Text>
+                                    {message.type === 'user' && (
+                                        <Avatar
+                                            icon={<UserOutlined />}
+                                            style={{
+                                                backgroundColor: '#1890ff',
+                                                marginLeft: '8px'
+                                            }}
+                                            size="small"
+                                        />
+                                    )}
+                                </div>
+
+                                <div
+                                    style={{
+                                        backgroundColor: message.type === 'user' ? '#1890ff15' : '#f5f5f5',
+                                        padding: '10px 14px',
+                                        borderRadius: '12px',
+                                        maxWidth: '85%',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                    }}
+                                >
+                                    {message.isLoading ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <SyncOutlined spin />
+                                            <span>Thinking...</span>
+                                        </div>
+                                    ) : message.isError ? (
+                                        <div>
+                                            <div style={{ color: '#ff4d4f', marginBottom: '8px' }}>
+                                                {message.content}
+                                            </div>
+                                            <Button
+                                                size="small"
+                                                danger
+                                                onClick={() => {
+                                                    // Finds the last user message and retries it
+                                                    const lastUserMsg = [...conversationHistory]
+                                                        .reverse()
+                                                        .find(msg => msg.type === 'user')
+
+                                                    if (lastUserMsg) {
+                                                        setUserQuery(lastUserMsg.content);
+                                                        // Removes the error message
+                                                        setConversationHistory(prev =>
+                                                            prev.filter((_, i) => i !== index)
+                                                        );
+                                                    }
+
+                                                }}
+                                            >
+                                                Retry
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div>{message.content}</div>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                                <div>
+                                    <p>No conversation yet. Ask a question to get started</p>
+                                    <p style={{ fontSize: '12px', color: '#888' }}>
+                                        Try asking about your environmental data, trends, recommendations
+                                    </p>
+                                </div>
+                            }
+                        />
+                    )}
+                    <div ref={conversationEndRef} />
+                </div>
+
+                {/* Quick Suggestions */}
+                {quickSuggestions.length > 0 && (
+                    <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {quickSuggestions.map((suggestion, index) => (
+                            <Button
+                                key={index}
+                                size="small"
+                                icon={<BulbOutlined />}
+                                onClick={() => handleSuggestionClick(suggestion)}
+                                style={{
+                                    backgroundColor: '#f0f8ff',
+                                    borderColor: '#d9d9d9',
+                                    borderRadius: '16px'
+                                }}
+                            >
+                                {suggestion}
+                            </Button>
+                        ))}
                     </div>
                 )}
+
+                {/* Input Area*/}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Input.TextArea
+                        value={userQuery}
+                        onChange={(e) => setUserQuery(e.target.value)}
+                        placeholder="Ask about you environmental data..."
+                        onKeyPress={handleKeyPress}
+                        autoSize={{ minRows: 1, maxRows: 4 }}
+                        style={{
+                            borderColor: '#AED581',
+                            borderRadius: '8px',
+                            flexGrow: 1,
+                            resize: 'none'
+                        }}
+                    />
+                    <Button
+                        type="primary"
+                        icon={<SendOutlined />}
+                        onClick={handleQuerySubmit}
+                        disabled={!userQuery.trim() || loading}
+                        style={{
+                            height: 'auto',
+                            backgroundColor: '#4CAF50',
+                            borderColor: '#388E3C',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '8px 16px'
+                        }}
+                    />
+                </div>
+
+                {/* Help Text */}
+                <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                        <QuestionCircleOutlined style={{ marginRight: '4px' }} />
+                        Ask questions about your data, anomalies, or for optimisation recommendations
+                    </Text>
+                </div>
             </Card>
         </div>
+
     );
-};
+}
 export default AIAssistant;
+

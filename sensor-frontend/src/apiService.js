@@ -115,6 +115,7 @@ const apiService = {
 
     getVehicleMovement: () => api.get('api/vehicle-movement'),
     getVehicleMovementHistory: (hours = 1) => api.get(`/api/vehicle-movement-history?hours=${hours}`),
+    getVehicleEmissions: (timeRange = 'day') => api.get(`/api/vehicle-emissions?time_range=${timeRange}`),
     generateReport: (payload) => api.post('/api/reports', payload),
     previewReport: (payload) => api.post('/api/reports/preview', payload),
     getRooms: () => api.get('/api/rooms'),

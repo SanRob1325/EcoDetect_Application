@@ -374,9 +374,9 @@ const RoomMonitor = () => {
                                             style={{ marginLeft: '8px' }}
                                         />
                                     )}
-                                    {roomData[room] && !roomData[room].disabled && roomData[room].flow_rate > 10 && (
+                                    {roomData[room] && !roomData[room].disabled && roomData[room].flow_rate > 5 && (
                                         <Badge
-                                            status="processing"
+                                            status={roomData[room].flow_rate > 11 ? "error" : "warning"}
                                             style={{ marginLeft: '4px' }}
                                         />
                                     )}
@@ -557,8 +557,8 @@ const RoomMonitor = () => {
                                                     justifyContent: 'space-between'
                                                 }}>
                                                     <Text>0 L/min</Text>
-                                                    <Text>10 L/min</Text>
-                                                    <Text>20 L/min</Text>
+                                                    <Text>5.5 L/min</Text>
+                                                    <Text>11 L/min</Text>
                                                 </div>
                                                 <div style={{
                                                     height: '24px',
@@ -568,9 +568,10 @@ const RoomMonitor = () => {
                                                     border: '1px solid #BBDEFB'
                                                 }}>
                                                     <div style={{
-                                                        width: `${Math.min(100, ((roomData[room]?.flow_rate != null ? roomData[room].flow_rate : 0) / 20 * 100))}%`,
+                                                        width: `${Math.min(100, ((roomData[room]?.flow_rate != null ? roomData[room].flow_rate : 0) / 11 * 100))}%`,
                                                         height: '100%',
-                                                        backgroundColor: (roomData[room]?.flow_rate != null && roomData[room]?.flow_rate > 10) ? '#FF9800' : '#2196F3',
+                                                        backgroundColor: (roomData[room]?.flow_rate != null && roomData[room]?.flow_rate > 11) ? '#F44336' : 
+                                                                        (roomData[room]?.flow_rate != null && roomData[room]?.flow_rate >5) ? '#FF9800' : '#2196F3',
                                                         borderRadius: '12px',
                                                         transition: 'width 0.5s ease'
                                                     }}>
@@ -580,13 +581,15 @@ const RoomMonitor = () => {
                                                 <Text
                                                     style={{ textAlign: 'center', marginTop: '10px', display: 'block' }}
                                                     type={
-                                                        roomData[room]?.flow_rate > 10 ? "warning" :
+                                                        roomData[room]?.flow_rate > 11 ? "danger" :
+                                                        roomData[room]?.flow_rate > 5 ? "warning" :
                                                             roomData[room]?.flow_rate > 0 ? "processing" :
                                                                 "success"
                                                     }
                                                 >
-                                                    {roomData[room]?.flow_rate > 10 ? "High Usage" :
-                                                        roomData[room]?.flow_rate > 0 ? "Active" : "No Flow"}
+                                                    {roomData[room]?.flow_rate > 11 ? "High Usage" :
+                                                     roomData[room]?.flow_rate > 5 ? "Warning: Elevated Usage" :
+                                                     roomData[room]?.flow_rate > 0 ? "Active" : "No Flow"}
                                                 </Text>
                                             </div>
                                         </div>
@@ -626,7 +629,9 @@ const RoomMonitor = () => {
                                                             roomData[room]?.temperature < 18 ||
                                                             roomData[room]?.humidity > 70 ||
                                                             roomData[room]?.humidity < 30 ||
-                                                            roomData[room]?.flow_rate > 10 ?
+                                                            roomData[room]?.flow_rate > 11 ?
+                                                            "error" :
+                                                            roomData[room]?.flow_rate > 5 ?
                                                             "warning" : "success"
                                                     }
                                                     style={{ marginRight: '8px' }}
@@ -637,8 +642,10 @@ const RoomMonitor = () => {
                                                             roomData[room]?.temperature < 18 ||
                                                             roomData[room]?.humidity > 70 ||
                                                             roomData[room]?.humidity < 30 ||
-                                                            roomData[room]?.flow_rate > 10 ?
-                                                            "Needs Attention" : "Optimal"
+                                                            roomData[room]?.flow_rate > 11 ?
+                                                            "Needs Attention" :
+                                                            roomData[room]?.flow_rate > 5 ?
+                                                            "Warning: Check Water Usage" : "Optimal"
                                                     }
                                                 </Text>
                                             </div>
@@ -651,7 +658,9 @@ const RoomMonitor = () => {
                                             {roomData[room]?.flow_rate > 0 && (
                                                 <div style={{ margin: '8px 0' }}>
                                                     <DropboxOutlined style={{ marginRight: '8px', color: '#1976D2' }} />
-                                                    <Text type={roomData[room]?.flow_rate > 10 ? "warning" : "processing"}>
+                                                    <Text type={
+                                                        roomData[room]?.flow_rate > 11 ? "danger" :
+                                                        roomData[room]?.flow_rate > 5 ? "warning" : "processing"}>
                                                         Water is currently flowing at {roomData[room].flow_rate.toFixed(1)} L/min
                                                     </Text>
                                                 </div>
