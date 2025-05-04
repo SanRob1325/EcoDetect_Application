@@ -289,8 +289,9 @@ const Dashboard = () => {
 
     //Not working yet but this track chat history of submitted queries
     const handleSendMessage = async (message = userInput) => {
-        message = String(message)
-        if (!message.trim()) return;
+        message = String(message).trim();
+
+        if (!message) return;
 
         setChatHistory(prev => [
             ...prev,
@@ -301,7 +302,7 @@ const Dashboard = () => {
         setLoadingAI(true);
 
         try {
-            const { data } = await apiService.queryAIAssistant(message.trim());
+            const { data } = await apiService.queryAIAssistant(message);
             //Update chat history with AI response
             setChatHistory(prev => [
                 ...prev.slice(0, -1),
