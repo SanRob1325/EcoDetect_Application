@@ -56,14 +56,56 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '16'  
+
     - name: Install dependencies
       run: | 
         cd ./sensor-frontend
         npm install
-    - name: Run Frontend Tests
+
+    - name: Install Playwright dependencies
+      run: |
+        cd ./sensor-frontend
+        npx playwright install --with-deps chromium
+
+    - name: Run Frontend Unit Tests
       run: |
         cd ./sensor-frontend
         npm test -- --coverage
+
+    - name: Start Frontend For E2E Testing
+      run: |
+        cd ./sensor-frontend
+        npm start &
+        sleep 15 # waits for the app to start
+
+    - name: Run System Tests
+      run: |
+        cd ./sensor-frontend
+        npx playwright test src/tests/system.spec.ts --project=chromium
+      continue-on-error: true # Don fail the build if the system tests fail
+
+    - name: Run Performance Tests
+      run: |
+        cd ./sensor-frontend
+        npx playwright test src/tests/performance.spec.ts --project=chromium
+      continue-on-error: true # Don't fail the build if performance tests fail
+
+    - name: Run Integration Tests
+      run: |
+        cd ./sensor-frontend
+        npx playwright test src/tests/integration.spec.ts --project=chromium
+      continue-on-error: true # Don't fail the build integration tests fail
+    
+    # Archives test artifacts
+    - name: Archive test screenshots
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-screenshots
+        path: |
+          ./sensor-frontend/*.png
+          ./sensor-frontend/test-results
+        retention-days: 7
+
     # Upload coverage
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
