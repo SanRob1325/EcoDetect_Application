@@ -62,38 +62,65 @@ jobs:
         cd ./sensor-frontend
         npm install
 
-    - name: Install Playwright dependencies
+    - name: Initialise Playwright
       run: |
         cd ./sensor-frontend
         npx playwright install --with-deps chromium
+        
+        # Creates a Playwright config file if it doesn't exist
+        cat > playwright.config.ts << 'EOL'
+        import { PlaywrightTestConfig } from '@playwright/test';
+
+        const config: PlaywrightTestConfig = {
+          testDir: './src/tests',
+          timeout: 180000,
+          retries: 0,
+          reporter: [ ['list'], ['html']],
+          use: {
+            headless: true,
+            viewport: { width: 1280, height: 720},
+            screenshot: 'only-on-failure',
+            trace: 'on-first-retry',  
+          },
+          projects: [
+            {
+              name: 'chromium',
+              use: { browserName: 'chromium' },
+            
+            },  
+          ],
+          webServer: {
+            command: 'npm start',
+            port: 3000,
+            timeout: 120000,
+            reuseExistingServer: true,  
+          },
+        };
+
+        export default config;
+        EOL
 
     - name: Run Frontend Unit Tests
       run: |
         cd ./sensor-frontend
         npm test -- --coverage
 
-    - name: Start Frontend For E2E Testing
-      run: |
-        cd ./sensor-frontend
-        npm start &
-        sleep 15 # waits for the app to start
-
     - name: Run System Tests
       run: |
         cd ./sensor-frontend
-        npx playwright test src/tests/system.spec.ts --project=chromium
+        npx playwright test src/tests/system.spec.ts
       continue-on-error: true # Don fail the build if the system tests fail
 
     - name: Run Performance Tests
       run: |
         cd ./sensor-frontend
-        npx playwright test src/tests/performance.spec.ts --project=chromium
+        npx playwright test src/tests/performance.spec.ts
       continue-on-error: true # Don't fail the build if performance tests fail
 
     - name: Run Integration Tests
       run: |
         cd ./sensor-frontend
-        npx playwright test src/tests/integration.spec.ts --project=chromium
+        npx playwright test src/tests/integration.spec.ts
       continue-on-error: true # Don't fail the build integration tests fail
     
     # Archives test artifacts
@@ -102,7 +129,6 @@ jobs:
       with:
         name: test-screenshots
         path: |
-          ./sensor-frontend/*.png
           ./sensor-frontend/test-results
         retention-days: 7
 
