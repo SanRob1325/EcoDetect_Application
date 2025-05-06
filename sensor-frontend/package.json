@@ -30,7 +30,10 @@
     "test:component": "jest --testPathPattern=src/__tests__/.*\\.test\\.js",
     "test:integration": "jest --testPathPattern=src/__tests__/integration\\.test\\.js",
     "test:update": "jest --updateSnapshot",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "test:e2e": "start-server-and-test start http://localhost:3000 cypress:run"
   },
   "eslintConfig": {
     "extends": [
@@ -56,12 +59,16 @@
     "@babel/plugin-transform-runtime": "^7.26.10",
     "@babel/preset-env": "^7.26.9",
     "@babel/preset-react": "^7.26.3",
+    "@testing-library/cypress": "^10.0.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/jest-axe": "^3.5.9",
     "axios": "^1.8.4",
     "babel-jest": "^29.7.0",
+    "cypress": "^12.17.4",
+    "cypress-axe": "^1.6.0",
+    "cypress-plugin-tab": "^1.0.5",
     "eslint-plugin-unused-imports": "^4.1.4",
     "history": "^5.3.0",
     "husky": "^9.1.7",
@@ -69,6 +76,7 @@
     "jest": "^29.7.0",
     "jest-axe": "^10.0.0",
     "jest-environment-jsdom": "^29.7.0",
-    "jest-transform-css": "^6.0.2"
+    "jest-transform-css": "^6.0.2",
+    "start-server-and-test": "^1.15.4"
   }
 }

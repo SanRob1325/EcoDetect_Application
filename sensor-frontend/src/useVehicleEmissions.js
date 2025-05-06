@@ -5,7 +5,7 @@ import emissionsCalculator from './emissionsCalculator';
 /**
  * Custom hook to fetch and process vehicle emissions data
  * @param {string} timeRange - Time range for data ('day', 'week', 'month')
- * @param {string} vehicleType - Vehicle type from emissionsCalculator.EMISSION_FACTORS
+ * @param {string} vehicleType - Vehicle type from emissionsCalculator
  * @returns {object} - Emissions data and loading state
  */
 const useVehicleEmissions = (timeRange = 'day', vehicleType = 'DEFAULT') => {
@@ -72,8 +72,6 @@ const useVehicleEmissions = (timeRange = 'day', vehicleType = 'DEFAULT') => {
 
 /**
  * Helper to estimate distance from movement data
- * This is a simplified placeholder - in a real implementation, 
- * you would need to use GPS data or a more sophisticated algorithm
  */
 const calculateDistanceFromMovementData = (movementData) => {
     if (!movementData || !Array.isArray(movementData) || movementData.length === 0) {
