@@ -36,14 +36,15 @@ except ImportError:
 class FlexibleSenseHat:
     def __init__(self):
         self._real_sensor = None
-        self.SENSE_HAT_AVAILABILITY = None
-        if self.SENSE_HAT_AVAILABILITY:
-            try:
-                self._real_sensor = SenseHat()
-            except Exception as e:
+     
+        try:
+            self._real_sensor = SenseHat()
+            self.SENSE_HAT_AVAILABILITY = True
+            logging.info("Successfully initiated real Sense HAT")
+        except Exception as e:
                 logging.error(f"Error initialising SENSE HAT: {e}")
                 self.SENSE_HAT_AVAILABILITY = False
-
+                logging.info("Using mock Sense HAT implementation")
     def _get_method(self, method_name):
         if self.SENSE_HAT_AVAILABILITY and self._real_sensor:
             return getattr(self._real_sensor, method_name)

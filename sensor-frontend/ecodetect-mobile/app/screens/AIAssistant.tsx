@@ -23,7 +23,7 @@ interface Message {
   sender: 'user' | 'bot';
   timestamp: Date;
 }
-
+// Inpiration for converting the React frontend to React Native: https://medium.com/@gwen_faraday/converting-a-react-app-to-react-native-d7df17968fc6
 const AIAssistant = () => {
   const { colors } = useTheme();
   const { sensorData, waterFlowData } = useAPI();

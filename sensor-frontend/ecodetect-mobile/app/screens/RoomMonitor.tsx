@@ -241,16 +241,17 @@ const RoomMonitor = () => {
                           style={[
                             styles.flowRateProgress, 
                             { 
-                              width: `${Math.min((roomData.flow_rate / 20) * 100, 100)}%`,
-                              backgroundColor: roomData.flow_rate > 10 ? colors.error : colors.success
+                              width: `${Math.min((roomData.flow_rate / 11) * 100, 100)}%`,
+                              backgroundColor: roomData.flow_rate > 11 ? colors.error :
+                                              roomData.flow_rate > 5 ? colors.warning || '#FFA500' : colors.success
                             }
                           ]} 
                         />
                       </View>
                       <View style={styles.flowRateLabels}>
                         <Text style={styles.flowRateLabel}>0</Text>
-                        <Text style={styles.flowRateLabel}>10</Text>
-                        <Text style={styles.flowRateLabel}>20</Text>
+                        <Text style={styles.flowRateLabel}>5</Text>
+                        <Text style={styles.flowRateLabel}>11</Text>
                       </View>
                     </View>
                   )}
@@ -284,17 +285,21 @@ const RoomMonitor = () => {
                             backgroundColor: 
                               (roomData.temperature !== undefined && (roomData.temperature > 25 || roomData.temperature < 18)) ||
                               (roomData.humidity !== undefined && (roomData.humidity > 70 || roomData.humidity < 30)) ||
-                              (roomData.flow_rate !== undefined && roomData.flow_rate > 10)
+                              (roomData.flow_rate !== undefined && roomData.flow_rate > 11)
                                 ? colors.error
-                                : colors.success
+                                : (roomData.flow_rate !== undefined && roomData.flow_rate > 5)
+                                  ? colors.warning || '#FFA500'
+                                  : colors.success
                           }
                         ]} 
                       />
                       <Text style={[styles.statusIndicatorText, { color: colors.text }]}>
                         {(roomData.temperature !== undefined && (roomData.temperature > 25 || roomData.temperature < 18)) ||
                         (roomData.humidity !== undefined && (roomData.humidity > 70 || roomData.humidity < 30)) ||
-                        (roomData.flow_rate !== undefined && roomData.flow_rate > 10)
+                        (roomData.flow_rate !== undefined && roomData.flow_rate > 11)
                           ? 'Needs Attention'
+                          : (roomData.flow_rate !== undefined && roomData.flow_rate > 5)
+                            ? 'Warning: High Flow'
                           : 'Optimal'}
                       </Text>
                     </View>
