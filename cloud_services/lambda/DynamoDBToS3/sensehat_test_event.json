@@ -1,0 +1,90 @@
+{
+    "Records": [
+      {
+        "eventID": "c4ca4238a0b923820dcc509a6f75849b",
+        "eventName": "INSERT",
+        "eventVersion": "1.1",
+        "eventSource": "aws:dynamodb",
+        "awsRegion": "us-east-1",
+        "dynamodb": {
+          "ApproximateCreationDateTime": 1683716400,
+          "Keys": {
+            "device_id": {
+              "S": "Main_Pi_SenseHat"
+            },
+            "timestamp": {
+              "S": "2025-05-07T10:00:00Z"
+            }
+          },
+          "NewImage": {
+            "device_id": {
+              "S": "Main_Pi_SenseHat"
+            },
+            "timestamp": {
+              "S": "2025-05-07T10:00:00Z"
+            },
+            "payload": {
+              "M": {
+                "temperature": {
+                  "N": "26.5"
+                },
+                "humidity": {
+                  "N": "55.3"
+                },
+                "pressure": {
+                  "N": "1013.25"
+                },
+                "imu": {
+                  "M": {
+                    "acceleration": {
+                      "M": {
+                        "x": {
+                          "N": "0.01"
+                        },
+                        "y": {
+                          "N": "0.02"
+                        },
+                        "z": {
+                          "N": "0.98"
+                        }
+                      }
+                    },
+                    "gyroscope": {
+                      "M": {
+                        "x": {
+                          "N": "0.1"
+                        },
+                        "y": {
+                          "N": "0.2"
+                        },
+                        "z": {
+                          "N": "0.3"
+                        }
+                      }
+                    },
+                    "magnetometer": {
+                      "M": {
+                        "x": {
+                          "N": "25.5"
+                        },
+                        "y": {
+                          "N": "26.7"
+                        },
+                        "z": {
+                          "N": "27.9"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "SequenceNumber": "111",
+          "SizeBytes": 26,
+          "StreamViewType": "NEW_AND_OLD_IMAGES"
+        },
+        "eventSourceARN": "arn:aws:dynamodb:us-east-1:123456789012:table/SenseHatData/stream/2023-05-10T00:00:00.000"
+      }
+    ]
+  }
