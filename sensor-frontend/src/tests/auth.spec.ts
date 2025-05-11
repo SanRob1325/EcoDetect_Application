@@ -1,4 +1,3 @@
-// src/tests/auth.spec.ts
 import { test, expect, Page } from '@playwright/test';
 import { TestUtils } from './utils/test-utils';
 

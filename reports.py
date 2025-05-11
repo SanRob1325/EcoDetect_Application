@@ -41,6 +41,8 @@ alert_table = dynamodb.Table(ALERT_TABLE)
 # Create Flask Blueprint
 report_routes = Blueprint('reports', __name__)
 
+# Inspiration for report generation integration: https://vonkunesnewton.medium.com/generating-pdfs-with-reportlab-ced3b04aedef
+# Inspiration for report generation integration: https://pythonassets.com/posts/create-pdf-documents-in-python-with-reportlab/
 def validate_report_parameters(params):
     """Validate he report genration parameters"""
     errors = []
@@ -294,26 +296,30 @@ def calculate_statistics(data, field):
         }
     
     values = []
-    
+
+    # Iterate over each item in the data/array
     for item in data:
         try:
+            # Check if specified field exitst and is not None
             if field in item and item[field] is not None:
                 value = float(item[field])
                 if value != 0: #Only add non zero values
                     values.append(value)
+        # Handle any errors during value extraction or conversion
         except (TypeError, ValueError) as e:
             logger.warning(f"Error processing value for {field}: {e}")
             continue
-            
+    # If no valid values are collected, return default statistics
+    # Returns empty list if theres no minimum value
     if not values:
         return {
             "min": None,
             "max": None,
             "avg": None,
-            "count": len(data)
+            "count": len(data) # Total data points
         }
     
-
+    # Return and calcualte statistics using valid values
     return {
         "min": min(values),
         "max": max(values),
@@ -323,11 +329,13 @@ def calculate_statistics(data, field):
     
 def find_anomalies(data, field, threshold=2.0):
     """Find anomalies in data using standard deviation"""
+    # Returns an empty list if data is empty
     if not data:
         return []
     
     values = []
     
+    # Extracct values from the data for the specified field
     for item in data:
         if field in item and item[field] is not None:
             try:
@@ -451,7 +459,7 @@ def generate_csv_report(report_data):
             water_df = pd.DataFrame(water_data)
             csv_files['water_usage'] = water_df.to_csv(index=False)
     
-    # Create anommalies CSV
+    # Create anomalies CSV, detects if theres any recent anomalies been registered
     anomalies_data = []
     for data_type, anomaly_list in report_data['anomalies'].items():
         for anomaly in anomaly_list:
@@ -467,7 +475,8 @@ def generate_csv_report(report_data):
     if report_data['alerts']:
         alerts_df = pd.DataFrame(report_data['alerts'])
         csv_files['alerts'] = alerts_df.to_csv(index=False)
-
+        
+    # Returns the dictionary containg generated CSV file content
     return csv_files
 
 def store_report(user_id, report_id, report_data, report_format):

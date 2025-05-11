@@ -8,7 +8,7 @@ from jose.utils import base64url_decode
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
+# Inspiration for implementation: https://medium.com/@darshana-edirisinghe/nodejs-series-episode-7-authentication-and-authorization-part-1-fundamentals-3d29c5b3766b
 class AuthMiddleware:
     def __init__(self, app, user_pool_id, app_client_id, region="eu-west-1"):
 
@@ -56,12 +56,15 @@ class AuthMiddleware:
     
     def fetch_jwks(self):
         """Fetch JSON Web Key Set from Cognito"""
+        # Constructs the JWKS URL from the region and user pool ID
         jwks_url = f"https://cognito-idp.{self.region}.amazonaws.com/{self.user_pool_id}/.well-known/jwks.json"
         try:
+            # Fetch the JWKS from the AWS Cognito endpoint
             response = requests.get(jwks_url)
             response.raise_for_status()
             self.jwks = response.json()
             
+            # Validate the keys presence in the response
             if 'keys' not in self.jwks:
                 logger.error("JWKS response does not contain 'keys'")
                 self.jwks = {"keys": []}
@@ -109,7 +112,7 @@ class AuthMiddleware:
                 logger.error("Token signature verification failed")
                 return False, None
                 
-            # Get and verify claims
+            # Extracts and verify claims
             claims = jwt.get_unverified_claims(token)
             
             # Check token expiration
@@ -123,12 +126,13 @@ class AuthMiddleware:
                 logger.error(f"Invalid issuer: {claims.get('iss')} != {expected_issuer}")
                 return False, None
                 
-            # Check audience (client id)
+            # Check audience (client id) of the token
             audience = claims.get('aud') or claims.get('client_id')
             if audience != self.app_client_id:
                 logger.error(f"Invalid audience: {audience} != {self.app_client_id}")
                 return False, None
-                
+            
+            # Logs successful verification    
             logger.debug(f"Token verified successfully for user: {claims.get('email', 'unknown')}")
             return True, claims
             

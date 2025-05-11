@@ -25,7 +25,7 @@ test.describe('EcoDetect System Tests', () => {
     await page.waitForTimeout(2000);
   });
 
-  // Set a longer timeout for all tests
+  // timeout for all tests
   test.setTimeout(90000);
 
   async function setupMocks(page: Page) {

@@ -8,6 +8,7 @@ from decimal import Decimal
 #Set up Logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+# Reference and inspiration for implementation: https://medium.com/codex/sms-and-email-sending-in-python-using-aws-a81df27fc210
 # Reference and inspiration for alert system: https://medium.com/@vishvratnashegaonkar27/sending-notifications-with-aws-sns-using-python-and-boto3-4c48bb51710
 class AlertService:
     """Manage alert generation, delivery, and tracking based on sensor thresholds"""
@@ -22,7 +23,6 @@ class AlertService:
         self.ses_client = ses_client or boto3.client("ses", region_name="eu-west-1")
         self.dynamodb = dynamodb or boto3.resource("dynamodb", region_name="eu-west-1")
         self.mongo_db = mongo_db
-        
         
         # Get environment variables
         self.sns_topic_arn = os.getenv("SNS_TOPIC_ARN")
@@ -231,7 +231,7 @@ class AlertService:
             prefs = self.mongo_db.notification_preferences.find_one({"user_id": user_id})
             if prefs:
                 return prefs
-        
+        # Retrieve DynamoDB version if MongoDB fails
         try:
             table_name = os.getenv("PREFERENCES_TABLE", "UserPreferences")
             table = self.dynamodb.Table(table_name)
@@ -254,9 +254,9 @@ class AlertService:
             
             except ValueError:
                 timestamp = datetime.now()
-        
+        # Condtions depending on the sensor output
         message = f"Alert: environmental conditions exceeded at {location} ({timestamp.strftime('%Y-%m-%d %H:%M:%S')})"
-        
+        # Checks for any sensor thresholds and delivers the specified alert context with the contexualised sensor value
         for threshold in exceeded_thresholds:
             if threshold == 'temperature_high':
                 message += f"Temperature is too high: {sensor_data.get('temperature')} C (Threshold: {thresholds.get('temperature_range', [0,25])[1]})"
@@ -304,13 +304,13 @@ class AlertService:
             if not self.ses_email_sender or not self.ses_email_recipient:
                 logger.warning("SES email configuration incomplete skipping email alert")
                 return
-        
+            # Generates HTML body of email using sensor thresholds and data
             html_body = self._generate_html_email(
                 sensor_data,
                 exceeded_thresholds,
                 thresholds
             )
-        
+            # Sends the data using SES
             response = self.ses_client.send_email(
                 Source=self.ses_email_sender,
                 Destination={
@@ -352,7 +352,7 @@ class AlertService:
         
         # Format timestamp as a readable string
         timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        
+        # Styling for the email
         html = f"""
         
         <html>
@@ -445,11 +445,11 @@ class AlertService:
 
     def _is_alert_in_cache(self,key):
         """Checks if alert was recently sent to avoid any duplicates"""
-        
+        # Gets current timestamp
         now = datetime.now().timestamp()
         if key not in self._alert_cache:
             return False
-        
+        # Check if cahched alert has expired
         cache_time = self._alert_cache[key]
         # If cached alert is older than TTL, it should  be considered as expired
         if now - cache_time > self._CACHE_TTL:
@@ -470,6 +470,7 @@ class AlertService:
     def _clean_cache(self):
         """Removes expired entries for the alert cache"""
         now = datetime.now().timestamp()
+        # Identify and remove expired cache entries
         expired_keys = [
             k for k, v in self._alert_cache.items()
             if now -v > self._CACHE_TTL
@@ -477,14 +478,17 @@ class AlertService:
         
         for key in expired_keys:
             del self._alert_cache[key]
-    
+
+    # For DynamoDB as it cannot take float values to be processed as alerts
     def _convert_floats_to_decimal(self,obj):
         """Recursivley convert all float values to Decimal for DynamoDB compatability"""
         if isinstance(obj, float):
             return Decimal(str(obj))
         elif isinstance(obj, dict):
+            # If the object is a dictionary, recursively convert float values to Decimal
             return {k: self._convert_floats_to_decimal(v) for k, v in obj.items()}
         elif isinstance(obj, list):
+            # If the object is a list, recursively convert each item to Decimal
             return [self._convert_floats_to_decimal(item) for item in obj]
         else:
             return obj
@@ -496,7 +500,7 @@ class AlertService:
             # Determine alert severity
             severity = "critical" if any(t in ['temperature_high', 'temperature_low','humidity_high', 'humidity_low'] for t in exceeded_thresholds) else "warning"
         
-            # Create alert item
+            # Create alert item with a ID and timestamp
             alert_id = f"alert-{datetime.now().timestamp()}"
             device_id = sensor_data.get("device_id", "unknown_device")
                  
@@ -516,6 +520,7 @@ class AlertService:
             if '_id' in sensor_data_for_dynamo:
                 del sensor_data_for_dynamo['_id']
 
+            # Prepare alert item for DynamoDB
             alert_item = {
                 "id": alert_id,
                 "device_id": device_id,

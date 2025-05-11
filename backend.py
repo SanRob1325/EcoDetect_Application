@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from sense_hat import SenseHat
 from datetime import datetime,timedelta,timezone
 from pymongo import MongoClient
-import pymongo
 import logging
 from alert_service import AlertService
 from reports import report_routes
@@ -32,17 +31,25 @@ from energy_optimiser import EnergyOptimiser
 #logging setup for debugging and operational visibility
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
+# Initialise Flask application with CORS support for cross-origin requests
 app = Flask(__name__)
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8081,http://localhost:19000").split(",")
 CORS(app, resources={r"/api/*": {"origins": allowed_origins, "supports_credentials": True}}, expose_headers=["Authorization"])
 
+# Register report routes blueprint to modularise API structure
 app.register_blueprint(report_routes)
+# NoSQL database with high performance storage
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-1")
+# Simple Notification Service for sending alerts via SMS
 sns_client = boto3.client("sns", region_name="eu-west-1")
+# Simple Email Service for sending email notifications
 ses_client = boto3.client("ses",region_name="eu-west-1")
+# Simple Storage Service for storing long term data
 s3_client = boto3.client('s3', region_name='eu-west-1')
+# Bedrock runtime for executing AI/ML models for recommendations
 bedrock_client = boto3.client('bedrock-runtime', region_name='eu-west-1')
 
+# Configured DynamoDB table names from environment or using defaults
 THRESHOLD_TABLE = os.getenv("THRESHOLD_TABLE","Thresholds")
 SENSOR_TABLE = dynamodb.Table(os.getenv("SENSEHAT_TABLE", "SenseHatData"))
 WATER_TABLE = dynamodb.Table(os.getenv("WATER_TABLE", "WaterFlowData"))
@@ -150,6 +157,8 @@ def add_security_headers(response):
 
     return response 
 
+# Inspiration for AWS Cognito integration : https://medium.com/analytics-vidhya/integrating-cognito-with-flask-e00010866054
+# Additional inspiration for Cognito integration: https://github.com/mblackgeo/flask-cognito-lib
 def verify_token(token):
     """Verify the Cognito JWT token"""
     try:
@@ -206,7 +215,14 @@ def verify_token(token):
 
 @app.before_request
 def auth_middleware():
-    """Middleware to verify authentication token"""
+    """
+    Middleware to verify authentication tokens before processing API requests.
+    Runs before each request to ensure proper authentication and authorisation
+    
+    - Extracts JWT token from Authorisation header
+    - Verifies token validity and signature
+    - Skips verification for public endpoints and stores user information in the request context for downstream handlers
+    """
     # Log the current request path
     logging.debug(f"Request to: {request.path} with method {request.method}")
 
@@ -279,6 +295,7 @@ def login():
 # Near the top of your file, add a function to refresh JWKs
 def refresh_jwks():
     global jwks
+    # Fetch JWT keys from Cognito for token validation
     jwkeys_url = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
     try:
         logging.info("Fetching Cognito JWKs...")
@@ -337,14 +354,14 @@ alert_service= AlertService(
     mongo_db=db
 )
 
-# Initialise device machine learning model
+# Initialise device machine learning model for anomaly detection and predictions
 device_ml_model = DeviceMLModel()
 
-# Initialise optimiser
+# Initialise optimiser services for providing recommendatiosn
 energy_optimiser = EnergyOptimiser()
 
 def validate_environment():
-    """Validate critical environment variables"""
+    """Validate critical environment variables are set before the app"""
     required_vars = [
         "COGNITO_USER_POOL_ID",
         "COGNITO_APP_CLIENT_ID",
@@ -385,6 +402,7 @@ def calculate_carbon_footprint(data):
         
     return min(footprint, 100) # up to 100%
 
+# Retrieves S£ data from its respective bucket
 def fetch_s3_csv(bucket_name, file_key):
     "Fetch CSV file from S3 and return pandas dataframe"
     try:
@@ -418,7 +436,7 @@ def get_long_term_water_trends():
 def get_training_data():
     df = fetch_s3_csv('training-ecodetect', 'carbon_footprint_training_combined.csv')
     return df.tail(7)
-    
+# Normalises the sensor data to have less noise and be more accurate by taking into account of the CPU temperature   
 def normalize_sensor_data(data):
     normalized_data = {}
     
@@ -505,7 +523,7 @@ def get_default_thresholds():
         }
     return thresholds
 
-#recieves sensor data from the secondary pi
+#recieves sensor data from the other Raspberry Pi's
 @app.route('/api/sensor-data-upload', methods=['POST'])
 def receive_sensor_data():
     global latest_co2_data, latest_flow_data
@@ -538,7 +556,7 @@ def receive_sensor_data():
                 }
                 water_data_collection.insert_one(water_data)
 
-        #add time stamp and metadata
+        #Adds time stamp and metadata
         normalized_data['timestamp'] = datetime.now()
         normalized_data['location'] = raw_data.get('location', 'Unknown Room')
         normalized_data['room_id'] = raw_data.get('room_id', 'unknown')
@@ -746,7 +764,7 @@ def fetch_recent_sensor_data(device_id):
     except Exception as e:
         logging.error(f"Error fetching DynamoDB data: {e}", exc_info=True)
         return []
-
+# Formats the
 def format_sensor_values(data):
     """Format sensor data to be human readable and rounded up data"""
     formatted_data = {}
@@ -787,6 +805,7 @@ def format_sensor_values(data):
     
     return formatted_data
 
+# Prompt engineering Bedrock response inspiration: https://aws.amazon.com/blogs/machine-learning/implementing-advanced-prompt-engineering-with-amazon-bedrock/
 def robust_query_prompt(user_query, temperature_value, humidity_value, pressure_value, imu_text, flow_rate, trend_summary, vehicle_data=None, room_context=""):
     
     formatted_data = format_sensor_values({
@@ -974,6 +993,7 @@ def format_sensor_values(data):
     
     return formatted_data
 
+# Inspiration for integrating AWS Bedrock:https://justm0rph3u5.medium.com/generative-ai-web-app-using-python-flask-with-amazon-bedrock-e1d8ab8ab906
 # Using Titan Amazon AI agent
 @app.route('/api/ai-assistant', methods=['POST'])
 def ai_assistant():
@@ -2349,7 +2369,7 @@ def test_sns():
         assert response.get('ResponseMetadata', {}).get('HTTPStatus') == 200
     except Exception as e:
         pytest.fail(f"SNS test failed: {str(e)}")
-
+# A Test for checking ses response
 @app.route('/api/test-ses', methods=['GET'])
 def test_ses():
     try:
@@ -2421,7 +2441,7 @@ def force_alert_test():
         "exceeded_thresholds": exceeded_thresholds,
         "alert_id": alert_id
     })
-    
+ # Test Forcing alerts   
 @app.route('/api/simple-alert-test', methods=['GET'])
 def simple_alert_test():
     try:
@@ -2551,7 +2571,7 @@ def get_vehicle_movement():
     except Exception as e:
         logging.error(f"Error in vehicle movement data: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
+# Inspiration  for vehicle integration and carbon impact https://github.com/nadinejackson1/carbon-footprint-estimator/blob/main/app.py
 def process_vehicle_movement(imu_data):
     """Convert raw IMU data into meaningful vehicle movement metrics"""
     # Extract values from IMU data

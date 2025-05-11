@@ -4,6 +4,8 @@ import logging
 import os
 from datetime import datetime
 
+# Code inspiration: https://pyimagesearch.com/2020/03/02/anomaly-detection-with-keras-tensorflow-and-deep-learning/
+# Code inspiration: https://www.geeksforgeeks.org/anomaly-detection-using-isolation-forest/
 class DeviceMLModel:
     """Machine learning model for on-device anomaly detection"""
 

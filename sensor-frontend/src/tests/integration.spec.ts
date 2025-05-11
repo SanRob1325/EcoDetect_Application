@@ -22,7 +22,7 @@ test.describe('EcoDetect Integration Tests', () => {
     await page.waitForTimeout(3000);
   });
 
-  // Set a longer timeout for all tests
+  // timeout for all tests
   test.setTimeout(180000); // 3 minutes
 
   // Test 1: Navigation test - simplified
