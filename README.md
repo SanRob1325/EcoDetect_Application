@@ -20,7 +20,7 @@ IoT AI generative Device developed using **Flask**,**MongoDB** via **Python** wi
 
 - An AI powered carbon footprint application
     - Processes sensor data to provide users with advice
-    - Sens notifications and preictive insights using Machine Learning Algorithms and thresholds that helps users  reduce their carbon footprint
+    - Sensor notifications and predictive insights using Machine Learning Algorithms and thresholds that helps users  reduce their carbon footprint
 
 ## This Repository 
 
