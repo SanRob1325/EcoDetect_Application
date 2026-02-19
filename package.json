@@ -1,15 +1,15 @@
 {
   "dependencies": {
     "antd": "^5.22.2",
-    "axios": "^1.8.2",
+    "axios": "^1.13.5",
     "chart.js": "^4.4.6",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
     "react-gauge-chart": "^0.5.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.30.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.58.2"
   }
 }
